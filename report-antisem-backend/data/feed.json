@@ -1,0 +1,30 @@
+[
+  {
+    "id": "feed-1",
+    "location": "New York, NY",
+    "type": "Online Harassment",
+    "time": "2 hours ago",
+    "status": "Under Review"
+  },
+  {
+    "id": "feed-2",
+    "location": "Los Angeles, CA",
+    "type": "Workplace",
+    "time": "5 hours ago",
+    "status": "Resolved"
+  },
+  {
+    "id": "feed-3",
+    "location": "Chicago, IL",
+    "type": "Educational",
+    "time": "1 day ago",
+    "status": "In Progress"
+  },
+  {
+    "id": "feed-4",
+    "location": "Houston, TX",
+    "type": "Community",
+    "time": "2 days ago",
+    "status": "Resolved"
+  }
+]

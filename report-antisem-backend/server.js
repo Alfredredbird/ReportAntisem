@@ -9,9 +9,31 @@ const feedRouter    = require("./routes/feed");
 const app  = express();
 const PORT = process.env.PORT || 3001;
 
+// ── CORS ──────────────────────────────────────────────────────────────────────
+// Allowed origins — add your production domain here when you deploy
+const ALLOWED_ORIGINS = [
+  "http://localhost:3000",   // React dev server (default)
+  "http://localhost:3001",
+  "http://127.0.0.1:3000",
+  "http://127.0.0.1:3001",
+];
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Allow requests with no origin (curl, Postman, mobile apps)
+    if (!origin) return callback(null, true);
+    if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
+    callback(new Error(`CORS: origin ${origin} not allowed`));
+  },
+  methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true,
+};
+
 // ── Middleware ────────────────────────────────────────────────────────────────
-app.use(helmet());
-app.use(cors());
+app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions)); // handle preflight OPTIONS for all routes
 app.use(express.json());
 
 // ── Routes ────────────────────────────────────────────────────────────────────

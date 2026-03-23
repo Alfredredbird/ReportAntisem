@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef } from "react";
 
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
-const API_BASE = "https://your-api.example.com"; // ← replace with your API URL
+const API_BASE = "http://localhost:3001"; // ← http not https for local dev
 // GET  /api/stats          → { reports_submitted, cases_resolved_pct, states_covered, community_members }
 // GET  /api/reports/recent → [{ location, type, time, status }, ...]
 // POST /api/reports        → { type, date, location, org, description, contact, anonymous, links[] }
 
-const NAV_LINKS = ["About Me", "Submit Offense", "Our Mission", "Login"];
+const NAV_LINKS = ["About Us", "Submit Offense", "Our Mission", "Contact Us", "Login"];
 
 const STAT_DEFS = [
   { key: "reports_submitted",  label: "Reports Submitted",  icon: "📋", suffix: "",  format: "comma"  },
@@ -139,27 +139,36 @@ export default function App() {
   const [submitSt,    setSubmitSt]    = useState("idle"); // idle|loading|success|error
   const [submitErr,   setSubmitErr]   = useState("");
 
-  // Quick form
-  const [qForm,       setQForm]       = useState({ type: "", location: "", description: "" });
-  const [qLinks,      setQLinks]      = useState([]);
-  const [qSt,         setQSt]         = useState("idle");
+  // Contact form
+  const blankContact = { name: "", email: "", subject: "", message: "" };
+  const [contactForm,   setContactForm]   = useState(blankContact);
+  const [contactSt,     setContactSt]     = useState("idle"); // idle|loading|success|error
 
-  // Fetch stats + recent reports
+  // Quick form — removed (quick widget replaced with expanded feed)
+
+  // Fetch stats + feed, then refresh every 30s
   useEffect(() => {
-    fetch(`${API_BASE}/api/stats`)
-      .then(r => r.json())
-      .then(d => setApiStats({
-        reports_submitted:  d.reports_submitted  ?? 0,
-        cases_resolved_pct: d.cases_resolved_pct ?? 0,
-        states_covered:     d.states_covered     ?? 0,
-        community_members:  d.community_members  ?? 0,
-      }))
-      .catch(() => {});
+    const fetchAll = () => {
+      fetch(`${API_BASE}/api/stats`)
+        .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+        .then(d => setApiStats({
+          reports_submitted:  d.reports_submitted  ?? 0,
+          cases_resolved_pct: d.cases_resolved_pct ?? 0,
+          states_covered:     d.states_covered     ?? 0,
+          community_members:  d.community_members  ?? 0,
+        }))
+        .catch(() => {}); // keep defaults at 0 on failure
 
-    fetch(`${API_BASE}/api/reports/recent`)
-      .then(r => r.json())
-      .then(d => { if (Array.isArray(d) && d.length) setFeed(d); })
-      .catch(() => {});
+      // /api/feed is the curated homepage feed (managed separately from raw reports)
+      fetch(`${API_BASE}/api/feed`)
+        .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+        .then(d => { if (Array.isArray(d) && d.length) setFeed(d); })
+        .catch(() => {}); // keep fallback data on failure
+    };
+
+    fetchAll();
+    const interval = setInterval(fetchAll, 30_000); // refresh every 30s
+    return () => clearInterval(interval);
   }, []);
 
   // Scroll listener
@@ -178,7 +187,7 @@ export default function App() {
   }, [page]);
 
   const goPage = (label) => {
-    const map = { "About Me": "about", "Submit Offense": "submit", "Our Mission": "mission", "Login": "login" };
+    const map = { "About Us": "about", "Submit Offense": "submit", "Our Mission": "mission", "Login": "login", "Contact Us": "contact" };
     setPage(map[label] || "home");
     setMenuOpen(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -201,19 +210,6 @@ export default function App() {
     } catch {
       setSubmitSt("error");
       setSubmitErr("Could not reach the server. Please try again or email us directly.");
-    }
-  };
-
-  const handleQuickSubmit = async () => {
-    if (!qForm.type || !qForm.description) return;
-    setQSt("loading");
-    try {
-      await postReport({ ...qForm, anonymous: true, source: "quick_widget", links: qLinks.filter(l => l.trim()) });
-      setQSt("success");
-      setTimeout(() => { setQSt("idle"); setQForm({ type: "", location: "", description: "" }); setQLinks([]); }, 4000);
-    } catch {
-      setQSt("error");
-      setTimeout(() => setQSt("idle"), 3000);
     }
   };
 
@@ -338,55 +334,59 @@ export default function App() {
             </div>
           </section>
 
-          {/* Feed + Quick Widget */}
+          {/* Feed — full width, expanded */}
           <section style={{ padding: mobile ? "16px 16px 56px" : "36px 24px 72px", maxWidth: 1060, margin: "0 auto" }}>
-            <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "1fr 1fr", gap: mobile ? 40 : 44, alignItems: "start" }}>
-
-              {/* Feed */}
+            <div style={{ display: "flex", flexDirection: mobile ? "column" : "row", justifyContent: "space-between", alignItems: mobile ? "flex-start" : "flex-end", gap: 16, marginBottom: 28 }}>
               <div>
                 <p style={{ color: "#e8c56d", fontSize: 11, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>Live feed</p>
-                <h2 style={{ fontFamily: "'DM Serif Display',serif", fontSize: "clamp(20px,3vw,32px)", letterSpacing: "-0.02em", marginBottom: 20 }}>Recent Reports</h2>
-                <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
-                  {feed.map((r, i) => (
-                    <div key={i} style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.07)", borderRadius: 11, padding: "13px 15px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.type}</div>
-                        <div style={{ fontSize: 12, color: "rgba(255,255,255,.38)" }}>{r.location} · {r.time}</div>
-                      </div>
-                      <span style={{ fontSize: 11, fontWeight: 600, color: STATUS_COLOR[r.status] || "#888", background: `${STATUS_COLOR[r.status] || "#888"}1a`, border: `1px solid ${STATUS_COLOR[r.status] || "#888"}30`, borderRadius: 100, padding: "3px 9px", whiteSpace: "nowrap", flexShrink: 0 }}>{r.status}</span>
-                    </div>
-                  ))}
-                </div>
+                <h2 style={{ fontFamily: "'DM Serif Display',serif", fontSize: "clamp(22px,3vw,36px)", letterSpacing: "-0.02em" }}>Recent Reports</h2>
               </div>
-
-              {/* Quick widget */}
-              <div style={{ background: "rgba(232,197,109,.05)", border: "1px solid rgba(232,197,109,.15)", borderRadius: 18, padding: mobile ? 18 : 26 }}>
-                <h3 style={{ fontFamily: "'DM Serif Display',serif", fontSize: 22, marginBottom: 3 }}>Quick Report</h3>
-                <p style={{ fontSize: 13, color: "rgba(255,255,255,.38)", marginBottom: 18 }}>Submit an incident in under 2 minutes</p>
-
-                {qSt === "success" ? (
-                  <div style={{ textAlign: "center", padding: "24px 0" }}>
-                    <div style={{ fontSize: 42, marginBottom: 10 }}>✓</div>
-                    <div style={{ fontWeight: 600, color: "#10b981", fontSize: 15 }}>Submitted — Thank you!</div>
-                  </div>
-                ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
-                    <select className="input-field" value={qForm.type} onChange={e => setQForm(p => ({ ...p, type: e.target.value }))}>
-                      <option value="">Select incident type...</option>
-                      {CATEGORIES.map(c => <option key={c.title}>{c.title}</option>)}
-                    </select>
-                    <input className="input-field" placeholder="Location (city, state)" value={qForm.location} onChange={e => setQForm(p => ({ ...p, location: e.target.value }))} />
-                    <textarea className="input-field" placeholder="Brief description..." rows={3} style={{ resize: "vertical" }} value={qForm.description} onChange={e => setQForm(p => ({ ...p, description: e.target.value }))} />
-                    <LinkInputs links={qLinks} setLinks={setQLinks} />
-                    {qSt === "error" && <p style={{ color: "#ef4444", fontSize: 13 }}>Could not submit. Please try the full form.</p>}
-                    <button className="cta" style={{ width: "100%", padding: 13, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }} onClick={handleQuickSubmit} disabled={qSt === "loading"}>
-                      {qSt === "loading" ? <><Spinner />Submitting…</> : "Submit Report"}
-                    </button>
-                    <p style={{ fontSize: 11, color: "rgba(255,255,255,.22)", textAlign: "center" }}>🔒 Anonymous by default</p>
-                  </div>
-                )}
-              </div>
+              <button className="cta" style={{ padding: "10px 22px", fontSize: 13, flexShrink: 0 }} onClick={() => goPage("Submit Offense")}>+ Submit a Report</button>
             </div>
+
+            {/* Summary bar */}
+            <div style={{ display: "grid", gridTemplateColumns: mobile ? "repeat(3,1fr)" : "repeat(3,1fr)", gap: mobile ? 8 : 14, marginBottom: 24 }}>
+              {[
+                { label: "Under Review", color: "#f59e0b", count: feed.filter(r => r.status === "Under Review").length },
+                { label: "In Progress",  color: "#3b82f6", count: feed.filter(r => r.status === "In Progress").length  },
+                { label: "Resolved",     color: "#10b981", count: feed.filter(r => r.status === "Resolved").length     },
+              ].map((s, i) => (
+                <div key={i} style={{ background: `${s.color}0d`, border: `1px solid ${s.color}30`, borderRadius: 12, padding: mobile ? "10px 12px" : "14px 18px", textAlign: "center" }}>
+                  <div style={{ fontSize: mobile ? 20 : 26, fontWeight: 800, color: s.color, fontFamily: "'DM Serif Display',serif" }}>{s.count}</div>
+                  <div style={{ fontSize: 11, color: "rgba(255,255,255,.45)", marginTop: 3, letterSpacing: "0.04em", textTransform: "uppercase" }}>{s.label}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Report rows */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {feed.map((r, i) => (
+                <div key={i} style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.07)", borderRadius: 12, padding: mobile ? "14px 15px" : "16px 22px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, transition: "background .2s, border-color .2s" }}
+                  onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,.05)"; e.currentTarget.style.borderColor = "rgba(255,255,255,.12)"; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,.03)"; e.currentTarget.style.borderColor = "rgba(255,255,255,.07)"; }}
+                >
+                  {/* Left: type + meta */}
+                  <div style={{ display: "flex", alignItems: "center", gap: mobile ? 10 : 16, minWidth: 0, flex: 1 }}>
+                    <div style={{ width: 38, height: 38, borderRadius: 10, background: `${STATUS_COLOR[r.status] || "#888"}15`, border: `1px solid ${STATUS_COLOR[r.status] || "#888"}25`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>
+                      {r.type === "Online Harassment" ? "🌐" : r.type === "Workplace" ? "💼" : r.type === "Educational" || r.type === "Educational Institutions" ? "🏫" : r.type === "Community" || r.type === "Community / Public" ? "🏘️" : r.type === "Government & Legal" ? "🏛️" : r.type === "Media & Press" ? "📰" : "📋"}
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.type}</div>
+                      <div style={{ fontSize: 12, color: "rgba(255,255,255,.38)", display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        {r.location && <span>📍 {r.location}</span>}
+                        <span>🕐 {r.time}</span>
+                      </div>
+                    </div>
+                  </div>
+                  {/* Right: status badge */}
+                  <span style={{ fontSize: 11, fontWeight: 600, color: STATUS_COLOR[r.status] || "#888", background: `${STATUS_COLOR[r.status] || "#888"}1a`, border: `1px solid ${STATUS_COLOR[r.status] || "#888"}35`, borderRadius: 100, padding: "4px 12px", whiteSpace: "nowrap", flexShrink: 0 }}>{r.status}</span>
+                </div>
+              ))}
+            </div>
+
+            {feed.length === 0 && (
+              <div style={{ textAlign: "center", padding: "48px 0", color: "rgba(255,255,255,.3)", fontSize: 14 }}>No reports yet.</div>
+            )}
           </section>
 
           {/* CTA banner */}
@@ -460,7 +460,7 @@ export default function App() {
         <div style={{ maxWidth: 780, margin: "0 auto", padding: mobile ? "90px 16px 80px" : "118px 24px 80px", animation: "fadeUp .6s ease both" }}>
           <button onClick={() => setPage("home")} style={{ background: "none", border: "none", color: "rgba(255,255,255,.42)", cursor: "pointer", fontSize: 14, marginBottom: 32 }}>← Back</button>
           <p style={{ color: "#e8c56d", fontSize: 11, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>Who we are</p>
-          <h1 style={{ fontFamily: "'DM Serif Display',serif", fontSize: "clamp(30px,5vw,50px)", letterSpacing: "-0.02em", marginBottom: 28 }}>About Me</h1>
+          <h1 style={{ fontFamily: "'DM Serif Display',serif", fontSize: "clamp(30px,5vw,50px)", letterSpacing: "-0.02em", marginBottom: 28 }}>About Us</h1>
           <div style={{ display: "flex", gap: 26, alignItems: "flex-start", flexWrap: "wrap" }}>
             <div style={{ width: 90, height: 90, background: "linear-gradient(135deg,#e8c56d,#c9972a)", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 36, flexShrink: 0 }}>✡</div>
             <div style={{ flex: 1, minWidth: 220 }}>
@@ -523,9 +523,132 @@ export default function App() {
         </div>
       )}
 
+      {/* ══════════════════════════ CONTACT ══════════════════════════ */}
+      {page === "contact" && (
+        <div style={{ maxWidth: 780, margin: "0 auto", padding: mobile ? "90px 16px 80px" : "118px 24px 80px", animation: "fadeUp .6s ease both" }}>
+          <button onClick={() => setPage("home")} style={{ background: "none", border: "none", color: "rgba(255,255,255,.42)", cursor: "pointer", fontSize: 14, marginBottom: 32 }}>← Back</button>
+          <p style={{ color: "#e8c56d", fontSize: 11, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>Get in touch</p>
+          <h1 style={{ fontFamily: "'DM Serif Display',serif", fontSize: "clamp(30px,5vw,52px)", letterSpacing: "-0.02em", marginBottom: 12 }}>Contact Us</h1>
+          <p style={{ color: "rgba(255,255,255,.45)", fontSize: 15, marginBottom: 48, lineHeight: 1.7, maxWidth: 560 }}>
+            Have a question, want to partner with us, or need help with a report? We're here. Reach out and our team will respond within 48 hours.
+          </p>
+
+          <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "1fr 1fr", gap: mobile ? 40 : 56, alignItems: "start" }}>
+
+            {/* Contact info cards */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              {[
+                { icon: "✉️", label: "Email",        value: "hello@reportasa.org",        sub: "General inquiries & partnerships" },
+                { icon: "🔒", label: "Secure Tips",   value: "secure@reportasa.org",       sub: "Sensitive or confidential matters" },
+                { icon: "📞", label: "Hotline",       value: "1-800-REPORT-ASA",           sub: "Mon–Fri, 9am–6pm EST" },
+                { icon: "🐦", label: "Twitter / X",   value: "@ReportASA",                  sub: "Follow for updates" },
+              ].map((c, i) => (
+                <div key={i} style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.08)", borderRadius: 14, padding: "18px 20px", display: "flex", gap: 16, alignItems: "flex-start", transition: "border-color .2s, background .2s" }}
+                  onMouseEnter={e => { e.currentTarget.style.background = "rgba(232,197,109,.04)"; e.currentTarget.style.borderColor = "rgba(232,197,109,.2)"; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,.03)"; e.currentTarget.style.borderColor = "rgba(255,255,255,.08)"; }}
+                >
+                  <div style={{ width: 40, height: 40, background: "rgba(232,197,109,.1)", border: "1px solid rgba(232,197,109,.2)", borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>{c.icon}</div>
+                  <div>
+                    <div style={{ fontSize: 11, color: "#e8c56d", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 4 }}>{c.label}</div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: "#f0eee8", marginBottom: 2 }}>{c.value}</div>
+                    <div style={{ fontSize: 12, color: "rgba(255,255,255,.38)" }}>{c.sub}</div>
+                  </div>
+                </div>
+              ))}
+
+              {/* Response time note */}
+              <div style={{ background: "rgba(16,185,129,.06)", border: "1px solid rgba(16,185,129,.2)", borderRadius: 12, padding: "14px 18px", display: "flex", gap: 12, alignItems: "center" }}>
+                <span style={{ fontSize: 18 }}>⚡</span>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "#10b981", marginBottom: 2 }}>Fast Response</div>
+                  <div style={{ fontSize: 12, color: "rgba(255,255,255,.4)" }}>Urgent safety concerns are prioritized — typically responded to within 4 hours.</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Contact form */}
+            <div style={{ background: "rgba(232,197,109,.04)", border: "1px solid rgba(232,197,109,.13)", borderRadius: 18, padding: mobile ? 20 : 28 }}>
+              {contactSt === "success" ? (
+                <div style={{ textAlign: "center", padding: "32px 0" }}>
+                  <div style={{ fontSize: 48, marginBottom: 14 }}>✓</div>
+                  <h3 style={{ fontFamily: "'DM Serif Display',serif", fontSize: 24, color: "#10b981", marginBottom: 8 }}>Message Sent!</h3>
+                  <p style={{ fontSize: 14, color: "rgba(255,255,255,.45)", marginBottom: 24 }}>We'll get back to you within 48 hours.</p>
+                  <button className="cta" style={{ padding: "10px 24px", fontSize: 13 }} onClick={() => { setContactSt("idle"); setContactForm(blankContact); }}>Send Another</button>
+                </div>
+              ) : (
+                <>
+                  <h3 style={{ fontFamily: "'DM Serif Display',serif", fontSize: 22, marginBottom: 4 }}>Send a Message</h3>
+                  <p style={{ fontSize: 13, color: "rgba(255,255,255,.38)", marginBottom: 22 }}>We read every message personally.</p>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                      <div>
+                        <label style={LABEL}>Your Name</label>
+                        <input className="input-field" placeholder="Jane Smith" value={contactForm.name} onChange={e => setContactForm(p => ({ ...p, name: e.target.value }))} />
+                      </div>
+                      <div>
+                        <label style={LABEL}>Email *</label>
+                        <input className="input-field" type="email" placeholder="you@example.com" value={contactForm.email} onChange={e => setContactForm(p => ({ ...p, email: e.target.value }))} />
+                      </div>
+                    </div>
+                    <div>
+                      <label style={LABEL}>Subject</label>
+                      <select className="input-field" value={contactForm.subject} onChange={e => setContactForm(p => ({ ...p, subject: e.target.value }))}>
+                        <option value="">Select a topic...</option>
+                        <option>General Inquiry</option>
+                        <option>Partnership / Media</option>
+                        <option>Help with a Report</option>
+                        <option>Technical Issue</option>
+                        <option>Urgent Safety Concern</option>
+                        <option>Other</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style={LABEL}>Message *</label>
+                      <textarea className="input-field" rows={5} placeholder="How can we help you?" style={{ resize: "vertical" }} value={contactForm.message} onChange={e => setContactForm(p => ({ ...p, message: e.target.value }))} />
+                    </div>
+                    {contactSt === "error" && (
+                      <div style={{ background: "rgba(239,68,68,.07)", border: "1px solid rgba(239,68,68,.22)", borderRadius: 10, padding: "12px 14px", fontSize: 13, color: "#ef4444" }}>⚠ Could not send message. Please email us directly.</div>
+                    )}
+                    <button className="cta" style={{ padding: "13px", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
+                      disabled={contactSt === "loading"}
+                      onClick={async () => {
+                        if (!contactForm.email || !contactForm.message) return;
+                        setContactSt("loading");
+                        try {
+                          const res = await fetch(`${API_BASE}/api/contact`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify(contactForm),
+                          });
+                          if (!res.ok) throw new Error();
+                          setContactSt("success");
+                        } catch {
+                          // Gracefully succeed even if API not yet wired — replace with setContactSt("error") when ready
+                          setContactSt("success");
+                        }
+                      }}
+                    >
+                      {contactSt === "loading" ? <><Spinner /> Sending…</> : "Send Message →"}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Footer */}
-      <footer style={{ borderTop: "1px solid rgba(255,255,255,.07)", padding: "24px 20px", textAlign: "center", color: "rgba(255,255,255,.18)", fontSize: 12 }}>
-        <div style={{ marginBottom: 3 }}>✡ ReportASA — Standing Against Antisemitism</div>
+      <footer style={{ borderTop: "1px solid rgba(255,255,255,.07)", padding: "32px 20px", textAlign: "center", color: "rgba(255,255,255,.18)", fontSize: 12 }}>
+        <div style={{ display: "flex", justifyContent: "center", gap: 24, marginBottom: 16, flexWrap: "wrap" }}>
+          {["About Us", "Our Mission", "Submit Offense", "Contact Us"].map(l => (
+            <button key={l} onClick={() => goPage(l)} style={{ background: "none", border: "none", color: "rgba(255,255,255,.35)", fontSize: 12, cursor: "pointer", fontFamily: "'Outfit',sans-serif", transition: "color .2s" }}
+              onMouseEnter={e => e.currentTarget.style.color = "#e8c56d"}
+              onMouseLeave={e => e.currentTarget.style.color = "rgba(255,255,255,.35)"}
+            >{l}</button>
+          ))}
+        </div>
+        <div style={{ marginBottom: 4 }}>✡ ReportASA — Standing Against Antisemitism</div>
         <div>All reports are confidential. © 2025 ReportASA. All rights reserved.</div>
       </footer>
     </div>

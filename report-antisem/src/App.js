@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
-const API_BASE = "http://localhost:3001"; // ← http not https for local dev
+const API_BASE = "http://192.168.12.187:3001"; // ← http not https for local dev
 // GET  /api/stats          → { reports_submitted, cases_resolved_pct, states_covered, community_members }
 // GET  /api/reports/recent → [{ location, type, time, status }, ...]
 // POST /api/reports        → { type, date, location, org, description, contact, anonymous, links[] }
@@ -606,7 +606,7 @@ export default function App() {
           <section style={{ padding: mobile ? "0 16px 64px" : "0 48px 80px", maxWidth: 1060, margin: "0 auto" }}>
             <div style={{ display: "grid", gridTemplateColumns: mobile ? "repeat(2,1fr)" : "repeat(4,1fr)", gap: mobile ? 10 : 16 }}>
               {[
-                { num: "2024",  label: "Year Founded",        icon: "📅" },
+                { num: "2026",  label: "Year Founded",        icon: "📅" },
                 { num: "50+",   label: "Partner Orgs",         icon: "🤝" },
                 { num: "38",    label: "States Reached",       icon: "🗺️" },
                 { num: "100%",  label: "Volunteer-Led",        icon: "❤️" },

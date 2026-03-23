@@ -13,6 +13,7 @@ const DATA_DIR      = path.join(__dirname, "data");
 const REPORTS_FILE  = path.join(DATA_DIR, "reports.json");
 const FEED_FILE     = path.join(DATA_DIR, "feed.json");
 const CONTACT_FILE  = path.join(DATA_DIR, "contact.json");
+const USERS_FILE    = path.join(DATA_DIR, "users.json");
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -25,6 +26,7 @@ function initFile(filePath, defaultValue) {
 
 initFile(REPORTS_FILE, []);
 initFile(CONTACT_FILE, []);
+initFile(USERS_FILE, []);
 initFile(FEED_FILE, [
   { id: "feed-1", location: "New York, NY",    type: "Online Harassment", time: "2 hours ago", status: "Under Review" },
   { id: "feed-2", location: "Los Angeles, CA", type: "Workplace",         time: "5 hours ago", status: "Resolved"     },
@@ -123,6 +125,44 @@ function computeStats() {
   };
 }
 
+// ── Users ─────────────────────────────────────────────────────────────────────
+function getAllUsers()       { return readJSON(USERS_FILE); }
+function saveUsers(users)   { writeJSON(USERS_FILE, users); }
+
+function getUserById(id)    { return getAllUsers().find(u => u.id === id) || null; }
+function getUserByEmail(email) {
+  return getAllUsers().find(u => u.email.toLowerCase() === email.toLowerCase()) || null;
+}
+
+function createUser(data) {
+  const users = getAllUsers();
+  const user  = {
+    id:           `user-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    createdAt:    new Date().toISOString(),
+    lastLoginAt:  new Date().toISOString(),
+    role:         data.role       || "user",
+    email:        data.email      || "",
+    passwordHash: data.passwordHash || "",
+    name:         data.name       || "",
+    title:        data.title      || "",
+    department:   data.department || "",
+    bio:          data.bio        || "",
+    avatar:       data.avatar     || "",
+  };
+  users.push(user);
+  saveUsers(users);
+  return user;
+}
+
+function updateUser(id, updates) {
+  const users = getAllUsers();
+  const idx   = users.findIndex(u => u.id === id);
+  if (idx === -1) return null;
+  users[idx] = { ...users[idx], ...updates, id, updatedAt: new Date().toISOString() };
+  saveUsers(users);
+  return users[idx];
+}
+
 // ── Contact Submissions ───────────────────────────────────────────────────────
 function getAllContactSubmissions() { return readJSON(CONTACT_FILE); }
 
@@ -152,4 +192,9 @@ module.exports = {
   computeStats,
   getAllContactSubmissions,
   createContactSubmission,
+  getAllUsers,
+  getUserById,
+  getUserByEmail,
+  createUser,
+  updateUser,
 };

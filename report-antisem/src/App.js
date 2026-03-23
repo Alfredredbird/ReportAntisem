@@ -144,6 +144,59 @@ export default function App() {
   const [contactForm,   setContactForm]   = useState(blankContact);
   const [contactSt,     setContactSt]     = useState("idle"); // idle|loading|success|error
 
+  // Auth state
+  const [user,        setUser]        = useState(null);   // null = not logged in
+  const [authView,    setAuthView]    = useState("login"); // "login" | "register"
+  const [authForm,    setAuthForm]    = useState({ email: "", password: "", name: "", title: "", department: "", bio: "" });
+  const [authSt,      setAuthSt]      = useState("idle"); // idle|loading|error
+  const [authErr,     setAuthErr]     = useState("");
+
+  // Restore session from cookie on mount
+  useEffect(() => {
+    fetch(`${API_BASE}/api/auth/me`, { credentials: "include" })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.user) setUser(d.user); })
+      .catch(() => {});
+  }, []);
+
+  const handleLogin = async () => {
+    setAuthSt("loading"); setAuthErr("");
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/login`, {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: authForm.email, password: authForm.password }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Login failed");
+      setUser(data.user);
+      setAuthSt("idle");
+      setAuthForm({ email: "", password: "", name: "", title: "", department: "", bio: "" });
+    } catch (e) { setAuthSt("error"); setAuthErr(e.message); }
+  };
+
+  const handleRegister = async () => {
+    setAuthSt("loading"); setAuthErr("");
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/register`, {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(authForm),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Registration failed");
+      setUser(data.user);
+      setAuthSt("idle");
+      setAuthForm({ email: "", password: "", name: "", title: "", department: "", bio: "" });
+    } catch (e) { setAuthSt("error"); setAuthErr(e.message); }
+  };
+
+  const handleLogout = async () => {
+    await fetch(`${API_BASE}/api/auth/logout`, { method: "POST", credentials: "include" });
+    setUser(null);
+    setPage("home");
+  };
+
   // Quick form — removed (quick widget replaced with expanded feed)
 
   // Fetch stats + feed, then refresh every 30s
@@ -251,9 +304,19 @@ export default function App() {
         {/* desktop */}
         {!mobile && (
           <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
-            {NAV_LINKS.map(l => l === "Submit Offense"
+            {NAV_LINKS.filter(l => l !== "Login").map(l => l === "Submit Offense"
               ? <button key={l} className="cta" style={{ padding: "8px 16px", fontSize: 13 }} onClick={() => goPage(l)}>{l}</button>
               : <button key={l} className="nav-btn" onClick={() => goPage(l)}>{l}</button>
+            )}
+            {user ? (
+              <button onClick={() => setPage("login")} style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(232,197,109,.08)", border: "1px solid rgba(232,197,109,.2)", borderRadius: 8, padding: "6px 12px", cursor: "pointer", marginLeft: 4 }}>
+                <div style={{ width: 26, height: 26, borderRadius: "50%", background: "linear-gradient(135deg,#e8c56d,#c9972a)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "#0a0a0f", fontWeight: 700 }}>
+                  {user.name?.charAt(0).toUpperCase()}
+                </div>
+                <span style={{ fontSize: 13, fontWeight: 500, color: "#e8c56d", maxWidth: 100, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.name?.split(" ")[0]}</span>
+              </button>
+            ) : (
+              <button className="nav-btn" onClick={() => goPage("Login")}>Login</button>
             )}
           </div>
         )}
@@ -657,28 +720,146 @@ export default function App() {
         </div>
       )}
 
-      {/* ══════════════════════════ LOGIN ══════════════════════════ */}
+      {/* ══════════════════════════ LOGIN / PROFILE ══════════════════════════ */}
       {page === "login" && (
-        <div style={{ maxWidth: 400, margin: "0 auto", padding: mobile ? "90px 16px 80px" : "130px 24px 80px", animation: "fadeUp .6s ease both" }}>
-          <div style={{ textAlign: "center", marginBottom: 32 }}>
-            <div style={{ width: 50, height: 50, background: "linear-gradient(135deg,#e8c56d,#c9972a)", borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, margin: "0 auto 16px" }}>✡</div>
-            <h1 style={{ fontFamily: "'DM Serif Display',serif", fontSize: 32, letterSpacing: "-0.02em", marginBottom: 5 }}>Welcome Back</h1>
-            <p style={{ color: "rgba(255,255,255,.38)", fontSize: 14 }}>Log in to your ReportASA account</p>
-          </div>
-          <div style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.09)", borderRadius: 18, padding: mobile ? 22 : 30 }}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 15 }}>
-              <div><label style={LABEL}>Email Address</label><input className="input-field" type="email" placeholder="you@example.com" /></div>
-              <div><label style={LABEL}>Password</label><input className="input-field" type="password" placeholder="••••••••" /></div>
-              <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                <button style={{ background: "none", border: "none", color: "#e8c56d", fontSize: 13, cursor: "pointer" }}>Forgot password?</button>
+        <div style={{ maxWidth: 480, margin: "0 auto", padding: mobile ? "90px 16px 80px" : "110px 24px 80px", animation: "fadeUp .6s ease both" }}>
+
+          {/* ── LOGGED IN: Profile card ── */}
+          {user ? (
+            <>
+              <button onClick={() => setPage("home")} style={{ background: "none", border: "none", color: "rgba(255,255,255,.42)", cursor: "pointer", fontSize: 14, marginBottom: 32 }}>← Back</button>
+
+              {/* Avatar + name */}
+              <div style={{ display: "flex", alignItems: "center", gap: 20, marginBottom: 32, padding: "24px 28px", background: "linear-gradient(135deg,rgba(232,197,109,.08),rgba(232,197,109,.03))", border: "1px solid rgba(232,197,109,.2)", borderRadius: 18 }}>
+                <div style={{ width: 64, height: 64, borderRadius: "50%", background: "linear-gradient(135deg,#e8c56d,#c9972a)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26, fontWeight: 700, color: "#0a0a0f", flexShrink: 0 }}>
+                  {user.name?.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 22, marginBottom: 3 }}>{user.name}</div>
+                  {user.title && <div style={{ fontSize: 13, color: "#e8c56d", fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", marginBottom: 2 }}>{user.title}</div>}
+                  {user.department && <div style={{ fontSize: 13, color: "rgba(255,255,255,.4)" }}>{user.department}</div>}
+                </div>
               </div>
-              <button className="cta" style={{ padding: 13, fontSize: 14 }}>Sign In</button>
-              <p style={{ textAlign: "center", fontSize: 13, color: "rgba(255,255,255,.32)" }}>
-                No account?{" "}
-                <button style={{ background: "none", border: "none", color: "#e8c56d", cursor: "pointer", fontSize: 13 }}>Create one →</button>
-              </p>
-            </div>
-          </div>
+
+              {/* Profile details */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 28 }}>
+                {[
+                  { label: "Email",      value: user.email,      icon: "✉️" },
+                  { label: "Role",       value: user.role,       icon: "🔑" },
+                  { label: "Member since", value: user.createdAt ? new Date(user.createdAt).toLocaleDateString("en-US", { month: "long", year: "numeric" }) : "—", icon: "📅" },
+                  { label: "Last login", value: user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString() : "—", icon: "🕐" },
+                ].map((row, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 14, background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.07)", borderRadius: 12, padding: "13px 16px" }}>
+                    <span style={{ fontSize: 18, flexShrink: 0 }}>{row.icon}</span>
+                    <div>
+                      <div style={{ fontSize: 11, color: "rgba(255,255,255,.35)", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 2 }}>{row.label}</div>
+                      <div style={{ fontSize: 14, fontWeight: 500 }}>{row.value || "—"}</div>
+                    </div>
+                  </div>
+                ))}
+                {user.bio && (
+                  <div style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.07)", borderRadius: 12, padding: "13px 16px" }}>
+                    <div style={{ fontSize: 11, color: "rgba(255,255,255,.35)", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 6 }}>Bio</div>
+                    <div style={{ fontSize: 14, color: "rgba(255,255,255,.65)", lineHeight: 1.6 }}>{user.bio}</div>
+                  </div>
+                )}
+              </div>
+
+              <button onClick={handleLogout} style={{ width: "100%", background: "rgba(239,68,68,.08)", border: "1px solid rgba(239,68,68,.25)", color: "#ef4444", borderRadius: 10, padding: 13, fontSize: 14, cursor: "pointer", fontFamily: "'Outfit',sans-serif", fontWeight: 600, transition: "all .2s" }}
+                onMouseEnter={e => e.currentTarget.style.background = "rgba(239,68,68,.14)"}
+                onMouseLeave={e => e.currentTarget.style.background = "rgba(239,68,68,.08)"}
+              >
+                Sign Out
+              </button>
+            </>
+          ) : (
+            /* ── NOT LOGGED IN: Login / Register forms ── */
+            <>
+              <div style={{ textAlign: "center", marginBottom: 36 }}>
+                <div style={{ width: 52, height: 52, background: "linear-gradient(135deg,#e8c56d,#c9972a)", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, margin: "0 auto 18px" }}>✡</div>
+                <h1 style={{ fontFamily: "'DM Serif Display',serif", fontSize: 32, letterSpacing: "-0.02em", marginBottom: 6 }}>
+                  {authView === "login" ? "Welcome Back" : "Create Account"}
+                </h1>
+                <p style={{ color: "rgba(255,255,255,.38)", fontSize: 14 }}>
+                  {authView === "login" ? "Sign in to your ReportASA account" : "Join the ReportASA team"}
+                </p>
+              </div>
+
+              {/* Tab toggle */}
+              <div style={{ display: "flex", background: "rgba(255,255,255,.04)", border: "1px solid rgba(255,255,255,.08)", borderRadius: 10, padding: 4, marginBottom: 28 }}>
+                {["login", "register"].map(v => (
+                  <button key={v} onClick={() => { setAuthView(v); setAuthSt("idle"); setAuthErr(""); }}
+                    style={{ flex: 1, background: authView === v ? "rgba(232,197,109,.15)" : "none", border: authView === v ? "1px solid rgba(232,197,109,.3)" : "1px solid transparent", borderRadius: 7, padding: "9px 0", fontSize: 13, fontWeight: 600, color: authView === v ? "#e8c56d" : "rgba(255,255,255,.45)", cursor: "pointer", fontFamily: "'Outfit',sans-serif", transition: "all .2s" }}>
+                    {v === "login" ? "Sign In" : "Register"}
+                  </button>
+                ))}
+              </div>
+
+              <div style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.09)", borderRadius: 18, padding: mobile ? 22 : 28 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+
+                  {/* Register-only fields */}
+                  {authView === "register" && (
+                    <>
+                      <div>
+                        <label style={LABEL}>Full Name *</label>
+                        <input className="input-field" placeholder="Jane Smith" value={authForm.name} onChange={e => setAuthForm(p => ({ ...p, name: e.target.value }))} />
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                        <div>
+                          <label style={LABEL}>Title</label>
+                          <input className="input-field" placeholder="e.g. Advocate" value={authForm.title} onChange={e => setAuthForm(p => ({ ...p, title: e.target.value }))} />
+                        </div>
+                        <div>
+                          <label style={LABEL}>Department</label>
+                          <input className="input-field" placeholder="e.g. Outreach" value={authForm.department} onChange={e => setAuthForm(p => ({ ...p, department: e.target.value }))} />
+                        </div>
+                      </div>
+                      <div>
+                        <label style={LABEL}>Bio <span style={{ color: "rgba(255,255,255,.3)", fontWeight: 400 }}>(optional)</span></label>
+                        <textarea className="input-field" rows={2} placeholder="A short bio about yourself..." style={{ resize: "none" }} value={authForm.bio} onChange={e => setAuthForm(p => ({ ...p, bio: e.target.value }))} />
+                      </div>
+                    </>
+                  )}
+
+                  {/* Shared fields */}
+                  <div>
+                    <label style={LABEL}>Email Address *</label>
+                    <input className="input-field" type="email" placeholder="you@example.com" value={authForm.email} onChange={e => setAuthForm(p => ({ ...p, email: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label style={LABEL}>Password *</label>
+                    <input className="input-field" type="password" placeholder={authView === "register" ? "Min. 8 characters" : "••••••••"} value={authForm.password} onChange={e => setAuthForm(p => ({ ...p, password: e.target.value }))} />
+                  </div>
+
+                  {authView === "login" && (
+                    <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                      <button style={{ background: "none", border: "none", color: "#e8c56d", fontSize: 13, cursor: "pointer" }}>Forgot password?</button>
+                    </div>
+                  )}
+
+                  {authErr && (
+                    <div style={{ background: "rgba(239,68,68,.07)", border: "1px solid rgba(239,68,68,.22)", borderRadius: 10, padding: "11px 14px", fontSize: 13, color: "#ef4444" }}>⚠ {authErr}</div>
+                  )}
+
+                  <button className="cta" style={{ padding: "13px", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
+                    disabled={authSt === "loading"}
+                    onClick={authView === "login" ? handleLogin : handleRegister}
+                  >
+                    {authSt === "loading" ? <><Spinner />{authView === "login" ? "Signing in…" : "Creating account…"}</> : authView === "login" ? "Sign In →" : "Create Account →"}
+                  </button>
+
+                  <p style={{ textAlign: "center", fontSize: 13, color: "rgba(255,255,255,.32)" }}>
+                    {authView === "login" ? "No account? " : "Already have one? "}
+                    <button style={{ background: "none", border: "none", color: "#e8c56d", cursor: "pointer", fontSize: 13 }}
+                      onClick={() => { setAuthView(authView === "login" ? "register" : "login"); setAuthSt("idle"); setAuthErr(""); }}>
+                      {authView === "login" ? "Create one →" : "Sign in →"}
+                    </button>
+                  </p>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       )}
 

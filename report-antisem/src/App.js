@@ -6,7 +6,7 @@ const API_BASE = "http://localhost:3001"; // ← http not https for local dev
 // GET  /api/reports/recent → [{ location, type, time, status }, ...]
 // POST /api/reports        → { type, date, location, org, description, contact, anonymous, links[] }
 
-const NAV_LINKS = ["About Us", "Submit Offense", "Our Mission", "Contact Us", "Login"];
+const NAV_LINKS = ["About Me", "Submit Offense", "Our Mission", "Contact Us", "Login"];
 
 const STAT_DEFS = [
   { key: "reports_submitted",  label: "Reports Submitted",  icon: "📋", suffix: "",  format: "comma"  },
@@ -187,7 +187,7 @@ export default function App() {
   }, [page]);
 
   const goPage = (label) => {
-    const map = { "About Us": "about", "Submit Offense": "submit", "Our Mission": "mission", "Login": "login", "Contact Us": "contact" };
+    const map = { "About Me": "about", "Submit Offense": "submit", "Our Mission": "mission", "Login": "login", "Contact Us": "contact" };
     setPage(map[label] || "home");
     setMenuOpen(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -460,7 +460,7 @@ export default function App() {
         <div style={{ maxWidth: 780, margin: "0 auto", padding: mobile ? "90px 16px 80px" : "118px 24px 80px", animation: "fadeUp .6s ease both" }}>
           <button onClick={() => setPage("home")} style={{ background: "none", border: "none", color: "rgba(255,255,255,.42)", cursor: "pointer", fontSize: 14, marginBottom: 32 }}>← Back</button>
           <p style={{ color: "#e8c56d", fontSize: 11, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>Who we are</p>
-          <h1 style={{ fontFamily: "'DM Serif Display',serif", fontSize: "clamp(30px,5vw,50px)", letterSpacing: "-0.02em", marginBottom: 28 }}>About Us</h1>
+          <h1 style={{ fontFamily: "'DM Serif Display',serif", fontSize: "clamp(30px,5vw,50px)", letterSpacing: "-0.02em", marginBottom: 28 }}>About Me</h1>
           <div style={{ display: "flex", gap: 26, alignItems: "flex-start", flexWrap: "wrap" }}>
             <div style={{ width: 90, height: 90, background: "linear-gradient(135deg,#e8c56d,#c9972a)", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 36, flexShrink: 0 }}>✡</div>
             <div style={{ flex: 1, minWidth: 220 }}>
@@ -623,8 +623,7 @@ export default function App() {
                           if (!res.ok) throw new Error();
                           setContactSt("success");
                         } catch {
-                          // Gracefully succeed even if API not yet wired — replace with setContactSt("error") when ready
-                          setContactSt("success");
+                          setContactSt("error");
                         }
                       }}
                     >
@@ -641,7 +640,7 @@ export default function App() {
       {/* Footer */}
       <footer style={{ borderTop: "1px solid rgba(255,255,255,.07)", padding: "32px 20px", textAlign: "center", color: "rgba(255,255,255,.18)", fontSize: 12 }}>
         <div style={{ display: "flex", justifyContent: "center", gap: 24, marginBottom: 16, flexWrap: "wrap" }}>
-          {["About Us", "Our Mission", "Submit Offense", "Contact Us"].map(l => (
+          {["About Me", "Our Mission", "Submit Offense", "Contact Us"].map(l => (
             <button key={l} onClick={() => goPage(l)} style={{ background: "none", border: "none", color: "rgba(255,255,255,.35)", fontSize: 12, cursor: "pointer", fontFamily: "'Outfit',sans-serif", transition: "color .2s" }}
               onMouseEnter={e => e.currentTarget.style.color = "#e8c56d"}
               onMouseLeave={e => e.currentTarget.style.color = "rgba(255,255,255,.35)"}

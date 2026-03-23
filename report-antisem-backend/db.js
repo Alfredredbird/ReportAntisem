@@ -9,9 +9,10 @@
 const fs   = require("fs");
 const path = require("path");
 
-const DATA_DIR     = path.join(__dirname, "data");
-const REPORTS_FILE = path.join(DATA_DIR, "reports.json");
-const FEED_FILE    = path.join(DATA_DIR, "feed.json");
+const DATA_DIR      = path.join(__dirname, "data");
+const REPORTS_FILE  = path.join(DATA_DIR, "reports.json");
+const FEED_FILE     = path.join(DATA_DIR, "feed.json");
+const CONTACT_FILE  = path.join(DATA_DIR, "contact.json");
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -23,6 +24,7 @@ function initFile(filePath, defaultValue) {
 }
 
 initFile(REPORTS_FILE, []);
+initFile(CONTACT_FILE, []);
 initFile(FEED_FILE, [
   { id: "feed-1", location: "New York, NY",    type: "Online Harassment", time: "2 hours ago", status: "Under Review" },
   { id: "feed-2", location: "Los Angeles, CA", type: "Workplace",         time: "5 hours ago", status: "Resolved"     },
@@ -121,6 +123,24 @@ function computeStats() {
   };
 }
 
+// ── Contact Submissions ───────────────────────────────────────────────────────
+function getAllContactSubmissions() { return readJSON(CONTACT_FILE); }
+
+function createContactSubmission(data) {
+  const submissions = getAllContactSubmissions();
+  const submission  = {
+    id:        `contact-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    createdAt: new Date().toISOString(),
+    name:      data.name    || "",
+    email:     data.email   || "",
+    subject:   data.subject || "",
+    message:   data.message || "",
+  };
+  submissions.push(submission);
+  writeJSON(CONTACT_FILE, submissions);
+  return submission;
+}
+
 module.exports = {
   getAllReports,
   getReportById,
@@ -130,4 +150,6 @@ module.exports = {
   upsertFeedItem,
   deleteFeedItem,
   computeStats,
+  getAllContactSubmissions,
+  createContactSubmission,
 };

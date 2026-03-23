@@ -5,14 +5,14 @@ const helmet  = require("helmet");
 const reportsRouter = require("./routes/reports");
 const statsRouter   = require("./routes/stats");
 const feedRouter    = require("./routes/feed");
+const contactRouter = require("./routes/contact");
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
 
 // ── CORS ──────────────────────────────────────────────────────────────────────
-// Allowed origins — add your production domain here when you deploy
 const ALLOWED_ORIGINS = [
-  "http://localhost:3000",   // React dev server (default)
+  "http://localhost:3000",
   "http://localhost:3001",
   "http://127.0.0.1:3000",
   "http://127.0.0.1:3001",
@@ -20,7 +20,6 @@ const ALLOWED_ORIGINS = [
 
 const corsOptions = {
   origin: (origin, callback) => {
-    // Allow requests with no origin (curl, Postman, mobile apps)
     if (!origin) return callback(null, true);
     if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
     callback(new Error(`CORS: origin ${origin} not allowed`));
@@ -33,13 +32,14 @@ const corsOptions = {
 // ── Middleware ────────────────────────────────────────────────────────────────
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 app.use(cors(corsOptions));
-app.options("*", cors(corsOptions)); // handle preflight OPTIONS for all routes
+app.options("*", cors(corsOptions));
 app.use(express.json());
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 app.use("/api/reports", reportsRouter);
 app.use("/api/stats",   statsRouter);
-app.use("/api/feed",    feedRouter);     // recent-reports feed (what the front-end polls)
+app.use("/api/feed",    feedRouter);
+app.use("/api/contact", contactRouter);
 
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get("/api/health", (_req, res) => res.json({ status: "ok", time: new Date().toISOString() }));

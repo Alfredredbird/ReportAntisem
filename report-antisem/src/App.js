@@ -6,7 +6,7 @@ const API_BASE = "http://localhost:3001"; // ← http not https for local dev
 // GET  /api/reports/recent → [{ location, type, time, status }, ...]
 // POST /api/reports        → { type, date, location, org, description, contact, anonymous, links[] }
 
-const NAV_LINKS = ["About Me", "Submit Offense", "Our Mission", "Contact Us", "Login"];
+const NAV_LINKS = ["About Us", "Submit Offense", "Our Mission", "Contact Us", "Login"];
 
 const STAT_DEFS = [
   { key: "reports_submitted",  label: "Reports Submitted",  icon: "📋", suffix: "",  format: "comma"  },
@@ -187,7 +187,7 @@ export default function App() {
   }, [page]);
 
   const goPage = (label) => {
-    const map = { "About Me": "about", "Submit Offense": "submit", "Our Mission": "mission", "Login": "login", "Contact Us": "contact" };
+    const map = { "About Us": "about", "Submit Offense": "submit", "Our Mission": "mission", "Login": "login", "Contact Us": "contact" };
     setPage(map[label] || "home");
     setMenuOpen(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -457,44 +457,203 @@ export default function App() {
 
       {/* ══════════════════════════ ABOUT ══════════════════════════ */}
       {page === "about" && (
-        <div style={{ maxWidth: 780, margin: "0 auto", padding: mobile ? "90px 16px 80px" : "118px 24px 80px", animation: "fadeUp .6s ease both" }}>
+        <div style={{ maxWidth: 900, margin: "0 auto", padding: mobile ? "90px 16px 80px" : "118px 48px 80px", animation: "fadeUp .6s ease both" }}>
           <button onClick={() => setPage("home")} style={{ background: "none", border: "none", color: "rgba(255,255,255,.42)", cursor: "pointer", fontSize: 14, marginBottom: 32 }}>← Back</button>
           <p style={{ color: "#e8c56d", fontSize: 11, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>Who we are</p>
-          <h1 style={{ fontFamily: "'DM Serif Display',serif", fontSize: "clamp(30px,5vw,50px)", letterSpacing: "-0.02em", marginBottom: 28 }}>About Me</h1>
-          <div style={{ display: "flex", gap: 26, alignItems: "flex-start", flexWrap: "wrap" }}>
-            <div style={{ width: 90, height: 90, background: "linear-gradient(135deg,#e8c56d,#c9972a)", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 36, flexShrink: 0 }}>✡</div>
-            <div style={{ flex: 1, minWidth: 220 }}>
-              <p style={{ fontSize: 15, lineHeight: 1.8, color: "rgba(255,255,255,.68)", marginBottom: 16 }}>
-                I founded ReportASA after witnessing antisemitism go unreported and unaddressed in my own community. As a Jewish American, I believe every incident deserves to be documented, heard, and acted upon.
-              </p>
-              <p style={{ fontSize: 15, lineHeight: 1.8, color: "rgba(255,255,255,.68)" }}>
-                This platform is built for ordinary people who want to make their voices heard — safely, securely, and effectively.
-              </p>
+          <h1 style={{ fontFamily: "'DM Serif Display',serif", fontSize: "clamp(30px,5vw,52px)", letterSpacing: "-0.02em", marginBottom: 16 }}>About Us</h1>
+          <p style={{ fontSize: 16, lineHeight: 1.8, color: "rgba(255,255,255,.55)", maxWidth: 620, marginBottom: 64, fontWeight: 300 }}>
+            ReportASA was founded by a group of Jewish Americans who believe every antisemitic incident deserves to be documented, heard, and acted upon. We are volunteers, advocates, and technologists united by one mission.
+          </p>
+
+          {/* Mission strip */}
+          <div style={{ background: "linear-gradient(135deg,rgba(232,197,109,.08),rgba(232,197,109,.03))", border: "1px solid rgba(232,197,109,.18)", borderRadius: 18, padding: mobile ? "24px 20px" : "28px 36px", marginBottom: 64, display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap" }}>
+            <div style={{ fontSize: 36 }}>✡</div>
+            <div>
+              <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 20, marginBottom: 6 }}>Our Commitment</div>
+              <div style={{ fontSize: 14, color: "rgba(255,255,255,.5)", lineHeight: 1.7, maxWidth: 560 }}>Every report is treated with confidentiality, urgency, and care. We never share personal information without consent, and we always follow up.</div>
             </div>
+          </div>
+
+          {/* Team heading */}
+          <p style={{ color: "#e8c56d", fontSize: 11, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 10 }}>The team</p>
+          <h2 style={{ fontFamily: "'DM Serif Display',serif", fontSize: "clamp(24px,4vw,38px)", letterSpacing: "-0.02em", marginBottom: 36 }}>People Behind the Platform</h2>
+
+          {/* Team grid */}
+          <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "repeat(auto-fill,minmax(260px,1fr))", gap: 20, marginBottom: 64 }}>
+            {[
+              { name: "Sarah Cohen",      role: "Founder & Executive Director", emoji: "👩‍💼", bio: "Founded ReportASA after personally experiencing antisemitism go unaddressed in her neighborhood.", social: "@sarahcohen" },
+              { name: "David Levine",     role: "Lead Developer",               emoji: "👨‍💻", bio: "Full-stack engineer with 10+ years of experience building community safety tools.", social: "@dlevine_dev" },
+              { name: "Rachel Goldberg",  role: "Head of Community Outreach",   emoji: "👩‍🤝‍👩", bio: "Connects ReportASA with local organizations, synagogues, and advocacy groups nationwide.", social: "@rachelg" },
+              { name: "Michael Stern",    role: "Legal Advisor",                emoji: "⚖️",  bio: "Civil rights attorney who ensures every report is handled in accordance with applicable law.", social: "@msternlaw" },
+              { name: "Alyssa Weiss",     role: "Data & Research Analyst",      emoji: "📊",  bio: "Transforms incident data into actionable insights that inform policy and advocacy work.", social: "@alyssaweiss" },
+              { name: "Jordan Katz",      role: "Operations Manager",           emoji: "🗂️",  bio: "Keeps the team running smoothly and ensures every submission receives a timely response.", social: "@jordankatz" },
+            ].map((member, i) => (
+              <div key={i}
+                style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.08)", borderRadius: 16, padding: "24px 22px", transition: "all .25s", cursor: "default" }}
+                onMouseEnter={e => { e.currentTarget.style.background = "rgba(232,197,109,.05)"; e.currentTarget.style.borderColor = "rgba(232,197,109,.25)"; e.currentTarget.style.transform = "translateY(-3px)"; }}
+                onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,.03)"; e.currentTarget.style.borderColor = "rgba(255,255,255,.08)"; e.currentTarget.style.transform = "none"; }}
+              >
+                {/* Avatar */}
+                <div style={{ width: 56, height: 56, background: "linear-gradient(135deg,rgba(232,197,109,.2),rgba(201,151,42,.15))", border: "1px solid rgba(232,197,109,.25)", borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26, marginBottom: 16 }}>
+                  {member.emoji}
+                </div>
+                <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 3 }}>{member.name}</div>
+                <div style={{ fontSize: 12, color: "#e8c56d", fontWeight: 600, letterSpacing: "0.04em", marginBottom: 12, textTransform: "uppercase" }}>{member.role}</div>
+                <div style={{ fontSize: 13, color: "rgba(255,255,255,.48)", lineHeight: 1.65, marginBottom: 16 }}>{member.bio}</div>
+                <div style={{ fontSize: 12, color: "rgba(255,255,255,.28)" }}>{member.social}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Join CTA */}
+          <div style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.08)", borderRadius: 18, padding: mobile ? "28px 20px" : "36px 40px", display: "flex", flexDirection: mobile ? "column" : "row", justifyContent: "space-between", alignItems: "center", gap: 20 }}>
+            <div>
+              <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 22, marginBottom: 6 }}>Want to join our team?</div>
+              <div style={{ fontSize: 14, color: "rgba(255,255,255,.45)" }}>We're always looking for passionate advocates, developers, and researchers.</div>
+            </div>
+            <button className="cta" style={{ padding: "12px 28px", fontSize: 14, flexShrink: 0 }} onClick={() => setPage("contact")}>Get in Touch →</button>
           </div>
         </div>
       )}
 
       {/* ══════════════════════════ MISSION ══════════════════════════ */}
       {page === "mission" && (
-        <div style={{ maxWidth: 780, margin: "0 auto", padding: mobile ? "90px 16px 80px" : "118px 24px 80px", animation: "fadeUp .6s ease both" }}>
-          <button onClick={() => setPage("home")} style={{ background: "none", border: "none", color: "rgba(255,255,255,.42)", cursor: "pointer", fontSize: 14, marginBottom: 32 }}>← Back</button>
-          <p style={{ color: "#e8c56d", fontSize: 11, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>Our mission</p>
-          <h1 style={{ fontFamily: "'DM Serif Display',serif", fontSize: "clamp(30px,5vw,50px)", letterSpacing: "-0.02em", marginBottom: 32 }}>Why We Exist</h1>
-          {[
-            { icon: "📢", title: "Amplify Voices",       body: "Every report is a voice that deserves to be heard. We ensure incidents are documented with integrity and treated with the urgency they deserve." },
-            { icon: "🛡️", title: "Protect Communities",  body: "By identifying patterns and hotspots, we help communities, institutions, and law enforcement respond proactively to antisemitic threats." },
-            { icon: "📊", title: "Build the Record",      body: "Our database of verified incidents provides researchers, journalists, and policymakers with the data needed to understand and combat antisemitism." },
-            { icon: "🌍", title: "Never Again — Together",body: "We believe that sunlight is the best disinfectant. Transparency, documentation, and community solidarity are our most powerful tools." },
-          ].map((item, i) => (
-            <div key={i} style={{ display: "flex", gap: 18, marginBottom: 28, paddingBottom: 28, borderBottom: i < 3 ? "1px solid rgba(255,255,255,.07)" : "none" }}>
-              <div style={{ fontSize: 26, flexShrink: 0, marginTop: 2 }}>{item.icon}</div>
-              <div>
-                <h3 style={{ fontFamily: "'DM Serif Display',serif", fontSize: 20, marginBottom: 7 }}>{item.title}</h3>
-                <p style={{ fontSize: 14, color: "rgba(255,255,255,.52)", lineHeight: 1.7 }}>{item.body}</p>
+        <div style={{ animation: "fadeUp .6s ease both" }}>
+
+          {/* Hero banner */}
+          <section style={{ position: "relative", overflow: "hidden", padding: mobile ? "110px 20px 72px" : "140px 48px 96px", textAlign: "center" }}>
+            <div style={{ position: "absolute", top: "10%", left: "5%",  width: mobile?160:360, height: mobile?160:360, background: "radial-gradient(circle,rgba(232,197,109,.07) 0%,transparent 70%)", borderRadius: "50%", pointerEvents: "none" }} />
+            <div style={{ position: "absolute", bottom:"5%",  right:"5%", width: mobile?120:260, height: mobile?120:260, background: "radial-gradient(circle,rgba(59,130,246,.05) 0%,transparent 70%)",  borderRadius: "50%", pointerEvents: "none" }} />
+            <button onClick={() => setPage("home")} style={{ background: "none", border: "none", color: "rgba(255,255,255,.42)", cursor: "pointer", fontSize: 14, display: "block", marginBottom: 40, position: "relative", zIndex: 1 }}>← Back</button>
+            <div style={{ position: "relative", zIndex: 1, maxWidth: 680, margin: "0 auto" }}>
+              <div style={{ display: "inline-flex", alignItems: "center", gap: 7, background: "rgba(232,197,109,.1)", border: "1px solid rgba(232,197,109,.25)", borderRadius: 100, padding: "5px 14px", marginBottom: 24, fontSize: 12, color: "#e8c56d", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                Our Mission
+              </div>
+              <h1 style={{ fontFamily: "'DM Serif Display',serif", fontSize: "clamp(36px,7vw,68px)", lineHeight: 1.08, letterSpacing: "-0.03em", marginBottom: 22 }}>
+                Why We<br />
+                <span style={{ background: "linear-gradient(135deg,#e8c56d,#f0d488,#c9972a)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundSize: "200%", animation: "gShift 4s ease infinite" }}>Exist</span>
+              </h1>
+              <p style={{ fontSize: mobile ? 15 : 17, color: "rgba(255,255,255,.5)", lineHeight: 1.75, fontWeight: 300 }}>
+                Antisemitism doesn't disappear when it goes unreported. We exist to make sure every incident leaves a record, gets a response, and helps build a safer future for Jewish communities everywhere.
+              </p>
+            </div>
+          </section>
+
+          {/* Big stat strip */}
+          <section style={{ padding: mobile ? "0 16px 64px" : "0 48px 80px", maxWidth: 1060, margin: "0 auto" }}>
+            <div style={{ display: "grid", gridTemplateColumns: mobile ? "repeat(2,1fr)" : "repeat(4,1fr)", gap: mobile ? 10 : 16 }}>
+              {[
+                { num: "2024",  label: "Year Founded",        icon: "📅" },
+                { num: "50+",   label: "Partner Orgs",         icon: "🤝" },
+                { num: "38",    label: "States Reached",       icon: "🗺️" },
+                { num: "100%",  label: "Volunteer-Led",        icon: "❤️" },
+              ].map((s, i) => (
+                <div key={i} style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.08)", borderRadius: 14, padding: mobile ? "18px 14px" : "22px 18px", textAlign: "center" }}>
+                  <div style={{ fontSize: 24, marginBottom: 8 }}>{s.icon}</div>
+                  <div style={{ fontSize: "clamp(22px,4vw,32px)", fontWeight: 800, color: "#e8c56d", fontFamily: "'DM Serif Display',serif", letterSpacing: -1, marginBottom: 5 }}>{s.num}</div>
+                  <div style={{ fontSize: 11, color: "rgba(255,255,255,.42)", letterSpacing: "0.06em", textTransform: "uppercase" }}>{s.label}</div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* Core pillars */}
+          <section style={{ padding: mobile ? "0 16px 72px" : "0 48px 88px", maxWidth: 1060, margin: "0 auto" }}>
+            <p style={{ color: "#e8c56d", fontSize: 11, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 10 }}>What drives us</p>
+            <h2 style={{ fontFamily: "'DM Serif Display',serif", fontSize: "clamp(24px,4vw,40px)", letterSpacing: "-0.02em", marginBottom: 40 }}>Our Core Pillars</h2>
+
+            <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "1fr 1fr", gap: 20 }}>
+              {[
+                { icon: "📢", color: "#e8c56d", title: "Amplify Voices",        body: "Every report is a voice that deserves to be heard. We ensure incidents are documented with integrity and treated with the urgency they deserve. Silence is not an option." },
+                { icon: "🛡️", color: "#3b82f6", title: "Protect Communities",   body: "By identifying patterns and hotspots, we help communities, institutions, and law enforcement respond proactively to antisemitic threats before they escalate." },
+                { icon: "📊", color: "#10b981", title: "Build the Record",       body: "Our growing database of verified incidents gives researchers, journalists, and policymakers the evidence needed to understand the true scale of antisemitism." },
+                { icon: "🌍", color: "#a78bfa", title: "Never Again — Together", body: "Transparency and documentation are our most powerful tools. Community solidarity, informed advocacy, and collective memory are how we honor the past and protect the future." },
+              ].map((item, i) => (
+                <div key={i}
+                  style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.07)", borderRadius: 18, padding: mobile ? "24px 20px" : "32px 28px", transition: "all .25s", position: "relative", overflow: "hidden" }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = `${item.color}40`; e.currentTarget.style.background = `${item.color}08`; e.currentTarget.style.transform = "translateY(-2px)"; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,.07)"; e.currentTarget.style.background = "rgba(255,255,255,.03)"; e.currentTarget.style.transform = "none"; }}
+                >
+                  {/* Accent corner glow */}
+                  <div style={{ position: "absolute", top: 0, right: 0, width: 80, height: 80, background: `radial-gradient(circle at 100% 0%, ${item.color}18 0%, transparent 70%)`, pointerEvents: "none" }} />
+                  <div style={{ width: 52, height: 52, background: `${item.color}15`, border: `1px solid ${item.color}30`, borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, marginBottom: 20 }}>
+                    {item.icon}
+                  </div>
+                  <h3 style={{ fontFamily: "'DM Serif Display',serif", fontSize: 22, marginBottom: 12, letterSpacing: "-0.01em" }}>{item.title}</h3>
+                  <p style={{ fontSize: 14, color: "rgba(255,255,255,.5)", lineHeight: 1.75 }}>{item.body}</p>
+                  <div style={{ marginTop: 20, width: 32, height: 3, background: `linear-gradient(90deg, ${item.color}, transparent)`, borderRadius: 2 }} />
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* How it works timeline */}
+          <section style={{ padding: mobile ? "0 16px 72px" : "0 48px 88px", maxWidth: 1060, margin: "0 auto" }}>
+            <p style={{ color: "#e8c56d", fontSize: 11, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 10 }}>The process</p>
+            <h2 style={{ fontFamily: "'DM Serif Display',serif", fontSize: "clamp(24px,4vw,40px)", letterSpacing: "-0.02em", marginBottom: 44 }}>How We Handle Every Report</h2>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+              {[
+                { step: "01", title: "You Submit",     desc: "A report is filed through our secure form — anonymously if preferred. You can include links, dates, and as much or as little detail as you're comfortable sharing.", icon: "📝" },
+                { step: "02", title: "We Review",      desc: "Our trained team reviews every submission within 24 hours, assessing severity, verifying details where possible, and assigning a case handler.", icon: "🔍" },
+                { step: "03", title: "We Respond",     desc: "Depending on the incident, we may connect you with legal resources, escalate to authorities, or add the case to our public incident database.", icon: "⚡" },
+                { step: "04", title: "We Document",    desc: "Every verified incident is recorded in our database, contributing to the growing body of evidence used by researchers, advocates, and policymakers.", icon: "📂" },
+              ].map((s, i, arr) => (
+                <div key={i} style={{ display: "flex", gap: mobile ? 16 : 28, position: "relative" }}>
+                  {/* Vertical line */}
+                  {i < arr.length - 1 && (
+                    <div style={{ position: "absolute", left: mobile ? 19 : 23, top: 52, bottom: 0, width: 2, background: "linear-gradient(to bottom, rgba(232,197,109,.3), rgba(232,197,109,.05))", zIndex: 0 }} />
+                  )}
+                  {/* Step circle */}
+                  <div style={{ width: mobile ? 40 : 48, height: mobile ? 40 : 48, borderRadius: "50%", background: "linear-gradient(135deg,#e8c56d,#c9972a)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0, zIndex: 1, marginTop: 4 }}>
+                    {s.icon}
+                  </div>
+                  {/* Content */}
+                  <div style={{ paddingBottom: i < arr.length - 1 ? 40 : 0, flex: 1 }}>
+                    <div style={{ fontSize: 11, color: "#e8c56d", fontWeight: 700, letterSpacing: "0.1em", marginBottom: 4 }}>STEP {s.step}</div>
+                    <h3 style={{ fontFamily: "'DM Serif Display',serif", fontSize: 20, marginBottom: 8 }}>{s.title}</h3>
+                    <p style={{ fontSize: 14, color: "rgba(255,255,255,.48)", lineHeight: 1.75, maxWidth: 580 }}>{s.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* Values strip */}
+          <section style={{ padding: mobile ? "0 16px 72px" : "0 48px 88px", maxWidth: 1060, margin: "0 auto" }}>
+            <div style={{ background: "linear-gradient(135deg,rgba(232,197,109,.07),rgba(232,197,109,.02))", border: "1px solid rgba(232,197,109,.15)", borderRadius: 22, padding: mobile ? "32px 22px" : "48px 48px" }}>
+              <p style={{ color: "#e8c56d", fontSize: 11, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 10 }}>Our values</p>
+              <h2 style={{ fontFamily: "'DM Serif Display',serif", fontSize: "clamp(22px,4vw,36px)", letterSpacing: "-0.02em", marginBottom: 32 }}>What We Stand For</h2>
+              <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr 1fr" : "repeat(4,1fr)", gap: mobile ? 16 : 24 }}>
+                {[
+                  { icon: "🔒", label: "Confidentiality" },
+                  { icon: "⚖️", label: "Accountability"  },
+                  { icon: "🌐", label: "Transparency"    },
+                  { icon: "💙", label: "Community First" },
+                ].map((v, i) => (
+                  <div key={i} style={{ textAlign: "center", padding: mobile ? "16px 8px" : "20px 12px" }}>
+                    <div style={{ fontSize: 32, marginBottom: 10 }}>{v.icon}</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "#f0eee8", letterSpacing: "0.02em" }}>{v.label}</div>
+                  </div>
+                ))}
               </div>
             </div>
-          ))}
+          </section>
+
+          {/* CTA */}
+          <section style={{ padding: mobile ? "0 16px 80px" : "0 48px 100px", maxWidth: 1060, margin: "0 auto" }}>
+            <div style={{ background: "#0a0a0f", border: "1px solid rgba(255,255,255,.08)", borderRadius: 22, padding: mobile ? "36px 22px" : "52px 52px", display: "flex", flexDirection: mobile ? "column" : "row", justifyContent: "space-between", alignItems: "center", gap: 28 }}>
+              <div>
+                <h3 style={{ fontFamily: "'DM Serif Display',serif", fontSize: "clamp(20px,3vw,30px)", marginBottom: 8 }}>Ready to make a difference?</h3>
+                <p style={{ fontSize: 14, color: "rgba(255,255,255,.45)", maxWidth: 420, lineHeight: 1.7 }}>Every report you submit adds to the record and helps protect your community. It takes less than 2 minutes.</p>
+              </div>
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap", flexShrink: 0 }}>
+                <button className="cta" style={{ fontSize: 15, padding: "13px 28px" }} onClick={() => goPage("Submit Offense")}>Report an Incident →</button>
+                <button className="nav-btn" style={{ fontSize: 14, padding: "12px 20px", border: "1px solid rgba(255,255,255,.15)", borderRadius: 10 }} onClick={() => goPage("Contact Us")}>Get in Touch</button>
+              </div>
+            </div>
+          </section>
+
         </div>
       )}
 
@@ -640,7 +799,7 @@ export default function App() {
       {/* Footer */}
       <footer style={{ borderTop: "1px solid rgba(255,255,255,.07)", padding: "32px 20px", textAlign: "center", color: "rgba(255,255,255,.18)", fontSize: 12 }}>
         <div style={{ display: "flex", justifyContent: "center", gap: 24, marginBottom: 16, flexWrap: "wrap" }}>
-          {["About Me", "Our Mission", "Submit Offense", "Contact Us"].map(l => (
+          {["About Us", "Our Mission", "Submit Offense", "Contact Us"].map(l => (
             <button key={l} onClick={() => goPage(l)} style={{ background: "none", border: "none", color: "rgba(255,255,255,.35)", fontSize: 12, cursor: "pointer", fontFamily: "'Outfit',sans-serif", transition: "color .2s" }}
               onMouseEnter={e => e.currentTarget.style.color = "#e8c56d"}
               onMouseLeave={e => e.currentTarget.style.color = "rgba(255,255,255,.35)"}

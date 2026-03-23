@@ -1,0 +1,213 @@
+/**
+ * /api/admin  — protected routes for dashboard (admin + team)
+ *
+ * Middleware: requireAuth (any logged-in user)
+ *             requireAdmin (role === "admin" only)
+ *
+ * GET    /api/admin/reports              – all reports with full detail
+ * PATCH  /api/admin/reports/:id          – edit any report field
+ * PATCH  /api/admin/reports/:id/status   – update status
+ * DELETE /api/admin/reports/:id          – delete a report
+ *
+ * GET    /api/admin/users                – list all users        [admin only]
+ * PATCH  /api/admin/users/:id            – edit user fields      [admin only]
+ * DELETE /api/admin/users/:id            – delete a user         [admin only]
+ *
+ * GET    /api/admin/contact              – all contact messages  [admin only]
+ * GET    /api/admin/stats                – summary dashboard stats
+ */
+
+const express = require("express");
+const router  = express.Router();
+const jwt     = require("jsonwebtoken");
+const db      = require("../db");
+
+const JWT_SECRET  = process.env.JWT_SECRET || "reportasa-dev-secret-change-in-production";
+const COOKIE_NAME = "reportasa_token";
+const ALLOWED_ROLES = ["admin", "team"];
+
+// ── Auth middleware ────────────────────────────────────────────────────────────
+function requireAuth(req, res, next) {
+  const token = req.cookies?.[COOKIE_NAME];
+  if (!token) return res.status(401).json({ error: "Not authenticated" });
+  try {
+    req.user = jwt.verify(token, JWT_SECRET);
+    if (!ALLOWED_ROLES.includes(req.user.role)) {
+      return res.status(403).json({ error: "Access denied — insufficient role" });
+    }
+    next();
+  } catch {
+    return res.status(401).json({ error: "Invalid or expired token" });
+  }
+}
+
+function requireAdmin(req, res, next) {
+  if (req.user?.role !== "admin") {
+    return res.status(403).json({ error: "Admin access required" });
+  }
+  next();
+}
+
+// Apply requireAuth to ALL admin routes
+router.use(requireAuth);
+
+// ── Dashboard summary stats ───────────────────────────────────────────────────
+router.get("/stats", async (_req, res) => {
+  try {
+    const [reports, users, contacts, feed] = await Promise.all([
+      db.getAllReports(),
+      db.getAllUsers(),
+      db.getAllContactSubmissions(),
+      db.getFeed(),
+    ]);
+
+    const byStatus = reports.reduce((acc, r) => {
+      acc[r.status] = (acc[r.status] || 0) + 1;
+      return acc;
+    }, {});
+
+    const byType = reports.reduce((acc, r) => {
+      acc[r.type] = (acc[r.type] || 0) + 1;
+      return acc;
+    }, {});
+
+    // Last 7 days report counts
+    const now = Date.now();
+    const daily = Array.from({ length: 7 }, (_, i) => {
+      const day = new Date(now - i * 86400000);
+      const label = day.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+      const count = reports.filter(r => {
+        const d = new Date(r.created_at || r.createdAt);
+        return d.toDateString() === day.toDateString();
+      }).length;
+      return { label, count };
+    }).reverse();
+
+    return res.json({
+      totals: {
+        reports:  reports.length,
+        users:    users.length,
+        contacts: contacts.length,
+        feed:     feed.length,
+      },
+      byStatus,
+      byType,
+      daily,
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Failed to load stats" });
+  }
+});
+
+// ── Reports ───────────────────────────────────────────────────────────────────
+router.get("/reports", async (_req, res) => {
+  try {
+    return res.json(await db.getAllReports());
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Failed to fetch reports" });
+  }
+});
+
+router.patch("/reports/:id", async (req, res) => {
+  try {
+    const allowed = ["type", "date", "location", "org", "description", "contact", "anonymous", "links", "source"];
+    const updates = {};
+    for (const k of allowed) {
+      if (req.body[k] !== undefined) updates[k] = req.body[k];
+    }
+    // Build dynamic SET clause
+    const cols = Object.keys(updates);
+    if (cols.length === 0) return res.status(400).json({ error: "No valid fields to update" });
+    const sets = cols.map((c, i) => `${c} = $${i + 1}`).join(", ");
+    const vals = [...Object.values(updates), req.params.id];
+    const { rows } = await db.query(
+      `UPDATE reports SET ${sets}, updated_at = NOW() WHERE id = $${vals.length} RETURNING *`,
+      vals
+    );
+    if (!rows[0]) return res.status(404).json({ error: "Report not found" });
+    return res.json({ success: true, report: rows[0] });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Failed to update report" });
+  }
+});
+
+router.patch("/reports/:id/status", async (req, res) => {
+  const VALID = ["Under Review", "In Progress", "Resolved", "Dismissed"];
+  const { status } = req.body;
+  if (!status || !VALID.includes(status)) {
+    return res.status(400).json({ error: `status must be one of: ${VALID.join(", ")}` });
+  }
+  try {
+    const updated = await db.updateReportStatus(req.params.id, status);
+    if (!updated) return res.status(404).json({ error: "Report not found" });
+    return res.json({ success: true, report: updated });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Failed to update status" });
+  }
+});
+
+router.delete("/reports/:id", async (req, res) => {
+  try {
+    const { rowCount } = await db.query("DELETE FROM reports WHERE id = $1", [req.params.id]);
+    if (rowCount === 0) return res.status(404).json({ error: "Report not found" });
+    return res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Failed to delete report" });
+  }
+});
+
+// ── Users (admin only) ────────────────────────────────────────────────────────
+router.get("/users", requireAdmin, async (_req, res) => {
+  try {
+    const users = await db.getAllUsers();
+    return res.json(users.map(u => { const { password_hash, ...rest } = u; return rest; }));
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Failed to fetch users" });
+  }
+});
+
+router.patch("/users/:id", requireAdmin, async (req, res) => {
+  const allowed = ["name", "title", "department", "bio", "role", "email"];
+  const updates = {};
+  for (const k of allowed) {
+    if (req.body[k] !== undefined) updates[k] = req.body[k];
+  }
+  try {
+    const updated = await db.updateUser(req.params.id, updates);
+    if (!updated) return res.status(404).json({ error: "User not found" });
+    const { passwordHash, password_hash, ...safe } = updated;
+    return res.json({ success: true, user: safe });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Failed to update user" });
+  }
+});
+
+router.delete("/users/:id", requireAdmin, async (req, res) => {
+  try {
+    const { rowCount } = await db.query("DELETE FROM users WHERE id = $1", [req.params.id]);
+    if (rowCount === 0) return res.status(404).json({ error: "User not found" });
+    return res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Failed to delete user" });
+  }
+});
+
+// ── Contact messages (admin only) ─────────────────────────────────────────────
+router.get("/contact", requireAdmin, async (_req, res) => {
+  try {
+    return res.json(await db.getAllContactSubmissions());
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Failed to fetch messages" });
+  }
+});
+
+module.exports = router;

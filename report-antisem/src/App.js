@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from "react";
+import Dashboard from "./Dashboard";
 
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
-const API_BASE = "http://192.168.12.187:3001"; // ← http not https for local dev
+const API_BASE = "http://localhost:3001"; // ← http not https for local dev
 // GET  /api/stats          → { reports_submitted, cases_resolved_pct, states_covered, community_members }
 // GET  /api/reports/recent → [{ location, type, time, status }, ...]
 // POST /api/reports        → { type, date, location, org, description, contact, anonymous, links[] }
@@ -197,6 +198,15 @@ export default function App() {
     setPage("home");
   };
 
+  // Route admin/team to dashboard when they click their profile
+  const handleProfileClick = () => {
+    if (user?.role === "admin" || user?.role === "team") {
+      setPage("dashboard");
+    } else {
+      setPage("login");
+    }
+  };
+
   // Quick form — removed (quick widget replaced with expanded feed)
 
   // Fetch stats + feed, then refresh every 30s
@@ -267,6 +277,19 @@ export default function App() {
   };
 
   // ── render ──────────────────────────────────────────────────────────────────
+
+  // Dashboard gets its own full-screen render — completely bypasses the main nav/layout
+  if (page === "dashboard" && user && (user.role === "admin" || user.role === "team")) {
+    return (
+      <Dashboard
+        user={user}
+        API_BASE={API_BASE}
+        onBack={() => { setPage("home"); window.scrollTo({ top: 0 }); }}
+        onLogout={handleLogout}
+      />
+    );
+  }
+
   return (
     <div style={{ minHeight: "100vh", background: "#0a0a0f", color: "#f0eee8", fontFamily: "'Outfit',sans-serif", overflowX: "hidden" }}>
       <style>{`
@@ -309,11 +332,14 @@ export default function App() {
               : <button key={l} className="nav-btn" onClick={() => goPage(l)}>{l}</button>
             )}
             {user ? (
-              <button onClick={() => setPage("login")} style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(232,197,109,.08)", border: "1px solid rgba(232,197,109,.2)", borderRadius: 8, padding: "6px 12px", cursor: "pointer", marginLeft: 4 }}>
+              <button onClick={handleProfileClick} style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(232,197,109,.08)", border: "1px solid rgba(232,197,109,.2)", borderRadius: 8, padding: "6px 12px", cursor: "pointer", marginLeft: 4 }}>
                 <div style={{ width: 26, height: 26, borderRadius: "50%", background: "linear-gradient(135deg,#e8c56d,#c9972a)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "#0a0a0f", fontWeight: 700 }}>
                   {user.name?.charAt(0).toUpperCase()}
                 </div>
                 <span style={{ fontSize: 13, fontWeight: 500, color: "#e8c56d", maxWidth: 100, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.name?.split(" ")[0]}</span>
+                {(user.role === "admin" || user.role === "team") && (
+                  <span style={{ fontSize: 10, background: "rgba(232,197,109,.2)", borderRadius: 4, padding: "1px 5px", color: "#e8c56d" }}>⚙</span>
+                )}
               </button>
             ) : (
               <button className="nav-btn" onClick={() => goPage("Login")}>Login</button>
@@ -606,7 +632,7 @@ export default function App() {
           <section style={{ padding: mobile ? "0 16px 64px" : "0 48px 80px", maxWidth: 1060, margin: "0 auto" }}>
             <div style={{ display: "grid", gridTemplateColumns: mobile ? "repeat(2,1fr)" : "repeat(4,1fr)", gap: mobile ? 10 : 16 }}>
               {[
-                { num: "2026",  label: "Year Founded",        icon: "📅" },
+                { num: "2024",  label: "Year Founded",        icon: "📅" },
                 { num: "50+",   label: "Partner Orgs",         icon: "🤝" },
                 { num: "38",    label: "States Reached",       icon: "🗺️" },
                 { num: "100%",  label: "Volunteer-Led",        icon: "❤️" },

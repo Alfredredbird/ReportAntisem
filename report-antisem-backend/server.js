@@ -10,6 +10,7 @@ const reportsRouter = require("./routes/reports");
 const statsRouter   = require("./routes/stats");
 const feedRouter    = require("./routes/feed");
 const contactRouter = require("./routes/contact");
+const adminRouter   = require("./routes/admin");
 const authRouter    = require("./routes/auth");
 
 const app  = express();
@@ -21,7 +22,6 @@ const ALLOWED_ORIGINS = [
   "http://localhost:3001",
   "http://127.0.0.1:3000",
   "http://127.0.0.1:3001",
-  "http://192.168.12.187:3000"
 ];
 
 const corsOptions = {
@@ -48,6 +48,7 @@ app.use("/api/reports", reportsRouter);
 app.use("/api/stats",   statsRouter);
 app.use("/api/feed",    feedRouter);
 app.use("/api/contact", contactRouter);
+app.use("/api/admin",   adminRouter);
 
 // ── Health check (also pings Postgres) ───────────────────────────────────────
 app.get("/api/health", async (_req, res) => {

@@ -2,6 +2,9 @@
 
 Node.js + Express backend that stores incident reports and feed data as JSON files.
 
+Front end: npm start
+Back end: npm run dev
+
 ---
 
 ## Setup

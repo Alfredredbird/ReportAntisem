@@ -1,200 +1,273 @@
 /**
- * db.js — lightweight JSON-file "database"
+ * db.js — PostgreSQL database layer
  *
- * File layout inside /data:
- *   reports.json   – array of report objects
- *   feed.json      – array of recent-feed items shown on the homepage
+ * Replaces the JSON file "database" with a real PostgreSQL connection.
+ * Set your connection string in the .env file:
+ *
+ *   DATABASE_URL=postgresql://user:password@localhost:5432/reportasa
+ *
+ * OR set individual vars:
+ *   PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD
  */
 
-const fs   = require("fs");
-const path = require("path");
+const { Pool } = require("pg");
 
-const DATA_DIR      = path.join(__dirname, "data");
-const REPORTS_FILE  = path.join(DATA_DIR, "reports.json");
-const FEED_FILE     = path.join(DATA_DIR, "feed.json");
-const CONTACT_FILE  = path.join(DATA_DIR, "contact.json");
-const USERS_FILE    = path.join(DATA_DIR, "users.json");
+// ── Connection pool ───────────────────────────────────────────────────────────
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  // If DATABASE_URL is not set, pg falls back to individual PG* env vars
+  ssl: process.env.NODE_ENV === "production"
+    ? { rejectUnauthorized: false }  // required for most hosted Postgres (Heroku, Render, etc.)
+    : false,
+});
 
-// ── Bootstrap ─────────────────────────────────────────────────────────────────
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+pool.on("error", (err) => {
+  console.error("Unexpected PostgreSQL pool error", err);
+});
 
-function initFile(filePath, defaultValue) {
-  if (!fs.existsSync(filePath)) {
-    fs.writeFileSync(filePath, JSON.stringify(defaultValue, null, 2));
-  }
-}
-
-initFile(REPORTS_FILE, []);
-initFile(CONTACT_FILE, []);
-initFile(USERS_FILE, []);
-initFile(FEED_FILE, [
-  { id: "feed-1", location: "New York, NY",    type: "Online Harassment", time: "2 hours ago", status: "Under Review" },
-  { id: "feed-2", location: "Los Angeles, CA", type: "Workplace",         time: "5 hours ago", status: "Resolved"     },
-  { id: "feed-3", location: "Chicago, IL",     type: "Educational",       time: "1 day ago",   status: "In Progress"  },
-  { id: "feed-4", location: "Houston, TX",     type: "Community",         time: "2 days ago",  status: "Resolved"     },
-]);
-
-// ── Generic helpers ───────────────────────────────────────────────────────────
-function readJSON(filePath) {
-  return JSON.parse(fs.readFileSync(filePath, "utf8"));
-}
-
-function writeJSON(filePath, data) {
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+// Convenience wrapper — returns rows from a parameterised query
+async function query(text, params) {
+  const result = await pool.query(text, params);
+  return result;
 }
 
 // ── Reports ───────────────────────────────────────────────────────────────────
-function getAllReports()         { return readJSON(REPORTS_FILE); }
-function saveReports(reports)   { writeJSON(REPORTS_FILE, reports); }
-
-function getReportById(id) {
-  return getAllReports().find(r => r.id === id) || null;
+async function getAllReports() {
+  const { rows } = await query("SELECT * FROM reports ORDER BY created_at DESC");
+  return rows;
 }
 
-function createReport(data) {
-  const reports = getAllReports();
-  const report  = {
-    id:          `report-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    status:      "Under Review",   // ← always starts here
-    createdAt:   new Date().toISOString(),
-    updatedAt:   new Date().toISOString(),
-    type:        data.type        || "",
-    date:        data.date        || "",
-    location:    data.location    || "",
-    org:         data.org         || "",
-    description: data.description || "",
-    contact:     data.contact     || "",
-    anonymous:   data.anonymous   !== false,
-    links:       Array.isArray(data.links) ? data.links.filter(Boolean) : [],
-    source:      data.source      || "full_form",
-  };
-  reports.push(report);
-  saveReports(reports);
-  return report;
+async function getReportById(id) {
+  const { rows } = await query("SELECT * FROM reports WHERE id = $1", [id]);
+  return rows[0] || null;
 }
 
-function updateReportStatus(id, status) {
-  const reports = getAllReports();
-  const idx     = reports.findIndex(r => r.id === id);
-  if (idx === -1) return null;
-  reports[idx].status    = status;
-  reports[idx].updatedAt = new Date().toISOString();
-  saveReports(reports);
-  return reports[idx];
+async function createReport(data) {
+  const { rows } = await query(
+    `INSERT INTO reports
+      (type, date, location, org, description, contact, anonymous, links, source, status)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'Under Review')
+     RETURNING *`,
+    [
+      data.type        || "",
+      data.date        || null,
+      data.location    || "",
+      data.org         || "",
+      data.description || "",
+      data.contact     || "",
+      data.anonymous   !== false,
+      JSON.stringify(Array.isArray(data.links) ? data.links.filter(Boolean) : []),
+      data.source      || "full_form",
+    ]
+  );
+  return rows[0];
+}
+
+async function updateReportStatus(id, status) {
+  const { rows } = await query(
+    "UPDATE reports SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *",
+    [status, id]
+  );
+  return rows[0] || null;
 }
 
 // ── Feed ──────────────────────────────────────────────────────────────────────
-function getFeed()           { return readJSON(FEED_FILE); }
-function saveFeed(items)     { writeJSON(FEED_FILE, items); }
+async function getFeed() {
+  const { rows } = await query("SELECT * FROM feed ORDER BY created_at DESC");
+  return rows;
+}
 
-function upsertFeedItem(item) {
-  const feed = getFeed();
-  const idx  = feed.findIndex(f => f.id === item.id);
-  if (idx === -1) {
-    feed.unshift(item);           // new items go to top
-    if (feed.length > 20) feed.pop(); // cap at 20 entries
-  } else {
-    feed[idx] = { ...feed[idx], ...item };
-  }
-  saveFeed(feed);
+async function upsertFeedItem(item) {
+  await query(
+    `INSERT INTO feed (id, location, type, time, status)
+     VALUES ($1,$2,$3,$4,$5)
+     ON CONFLICT (id) DO UPDATE
+       SET location = EXCLUDED.location,
+           type     = EXCLUDED.type,
+           time     = EXCLUDED.time,
+           status   = EXCLUDED.status`,
+    [item.id, item.location || "", item.type, item.time || "just now", item.status]
+  );
+
+  // Cap feed at 20 items (delete oldest beyond 20)
+  await query(
+    `DELETE FROM feed WHERE id NOT IN (
+       SELECT id FROM feed ORDER BY created_at DESC LIMIT 20
+     )`
+  );
+
   return getFeed();
 }
 
-function deleteFeedItem(id) {
-  const feed = getFeed().filter(f => f.id !== id);
-  saveFeed(feed);
-  return feed;
+async function deleteFeedItem(id) {
+  await query("DELETE FROM feed WHERE id = $1", [id]);
+  return getFeed();
 }
 
-// ── Stats (derived from reports + feed) ───────────────────────────────────────
-function computeStats() {
-  const reports  = getAllReports();
-  const total    = reports.length;
-  const resolved = reports.filter(r => r.status === "Resolved").length;
-  const states   = new Set(
-    reports
-      .map(r => (r.location || "").split(",").pop().trim())
-      .filter(Boolean)
-  ).size;
+// ── Stats ─────────────────────────────────────────────────────────────────────
+async function computeStats() {
+  const [totalRes, resolvedRes, statesRes, communityRes] = await Promise.all([
+    query("SELECT COUNT(*)::int AS total FROM reports"),
+    query("SELECT COUNT(*)::int AS resolved FROM reports WHERE status = 'Resolved'"),
+    query(`SELECT COUNT(DISTINCT TRIM(SPLIT_PART(location, ',', 2)))::int AS states
+           FROM reports WHERE location LIKE '%,%'`),
+    query("SELECT value FROM stats_overrides WHERE key = 'community_members'"),
+  ]);
+
+  const total    = totalRes.rows[0].total;
+  const resolved = resolvedRes.rows[0].resolved;
+  const states   = statesRes.rows[0].states;
+  const community = communityRes.rows[0]?.value ?? 0;
 
   return {
     reports_submitted:  total,
     cases_resolved_pct: total > 0 ? Math.round((resolved / total) * 100) : 0,
     states_covered:     states,
-    community_members:  0,   // set manually or via a separate endpoint
+    community_members:  Number(community),
   };
+}
+
+async function setCommunityMembers(count) {
+  await query(
+    `INSERT INTO stats_overrides (key, value)
+     VALUES ('community_members', $1)
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+    [count]
+  );
 }
 
 // ── Users ─────────────────────────────────────────────────────────────────────
-function getAllUsers()       { return readJSON(USERS_FILE); }
-function saveUsers(users)   { writeJSON(USERS_FILE, users); }
-
-function getUserById(id)    { return getAllUsers().find(u => u.id === id) || null; }
-function getUserByEmail(email) {
-  return getAllUsers().find(u => u.email.toLowerCase() === email.toLowerCase()) || null;
+async function getAllUsers() {
+  const { rows } = await query("SELECT * FROM users ORDER BY created_at DESC");
+  return rows;
 }
 
-function createUser(data) {
-  const users = getAllUsers();
-  const user  = {
-    id:           `user-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-    createdAt:    new Date().toISOString(),
-    lastLoginAt:  new Date().toISOString(),
-    role:         data.role       || "user",
-    email:        data.email      || "",
-    passwordHash: data.passwordHash || "",
-    name:         data.name       || "",
-    title:        data.title      || "",
-    department:   data.department || "",
-    bio:          data.bio        || "",
-    avatar:       data.avatar     || "",
+async function getUserById(id) {
+  const { rows } = await query("SELECT * FROM users WHERE id = $1", [id]);
+  return rows[0] || null;
+}
+
+async function getUserByEmail(email) {
+  const { rows } = await query(
+    "SELECT * FROM users WHERE LOWER(email) = LOWER($1)",
+    [email]
+  );
+  return rows[0] || null;
+}
+
+async function createUser(data) {
+  const { rows } = await query(
+    `INSERT INTO users
+      (email, password_hash, name, title, department, bio, avatar, role)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+     RETURNING *`,
+    [
+      data.email        || "",
+      data.passwordHash || "",
+      data.name         || "",
+      data.title        || "",
+      data.department   || "",
+      data.bio          || "",
+      data.avatar       || "",
+      data.role         || "user",
+    ]
+  );
+  return pgUserToJs(rows[0]);
+}
+
+async function updateUser(id, updates) {
+  // Build SET clause dynamically from allowed fields
+  const colMap = {
+    name:         "name",
+    title:        "title",
+    department:   "department",
+    bio:          "bio",
+    avatar:       "avatar",
+    role:         "role",
+    lastLoginAt:  "last_login_at",
+    passwordHash: "password_hash",
   };
-  users.push(user);
-  saveUsers(users);
-  return user;
+
+  const sets  = [];
+  const vals  = [];
+  let   idx   = 1;
+
+  for (const [jsKey, pgCol] of Object.entries(colMap)) {
+    if (updates[jsKey] !== undefined) {
+      sets.push(`${pgCol} = $${idx++}`);
+      vals.push(updates[jsKey]);
+    }
+  }
+
+  if (sets.length === 0) return getUserById(id);
+
+  vals.push(id);
+  const { rows } = await query(
+    `UPDATE users SET ${sets.join(", ")}, updated_at = NOW()
+     WHERE id = $${idx} RETURNING *`,
+    vals
+  );
+  return rows[0] ? pgUserToJs(rows[0]) : null;
 }
 
-function updateUser(id, updates) {
-  const users = getAllUsers();
-  const idx   = users.findIndex(u => u.id === id);
-  if (idx === -1) return null;
-  users[idx] = { ...users[idx], ...updates, id, updatedAt: new Date().toISOString() };
-  saveUsers(users);
-  return users[idx];
+// Map snake_case pg columns → camelCase JS (mirrors old JSON shape)
+function pgUserToJs(row) {
+  if (!row) return null;
+  return {
+    id:           row.id,
+    email:        row.email,
+    passwordHash: row.password_hash,
+    name:         row.name,
+    title:        row.title,
+    department:   row.department,
+    bio:          row.bio,
+    avatar:       row.avatar,
+    role:         row.role,
+    createdAt:    row.created_at,
+    lastLoginAt:  row.last_login_at,
+    updatedAt:    row.updated_at,
+  };
 }
 
 // ── Contact Submissions ───────────────────────────────────────────────────────
-function getAllContactSubmissions() { return readJSON(CONTACT_FILE); }
+async function getAllContactSubmissions() {
+  const { rows } = await query(
+    "SELECT * FROM contact_submissions ORDER BY created_at DESC"
+  );
+  return rows;
+}
 
-function createContactSubmission(data) {
-  const submissions = getAllContactSubmissions();
-  const submission  = {
-    id:        `contact-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-    createdAt: new Date().toISOString(),
-    name:      data.name    || "",
-    email:     data.email   || "",
-    subject:   data.subject || "",
-    message:   data.message || "",
-  };
-  submissions.push(submission);
-  writeJSON(CONTACT_FILE, submissions);
-  return submission;
+async function createContactSubmission(data) {
+  const { rows } = await query(
+    `INSERT INTO contact_submissions (name, email, subject, message)
+     VALUES ($1,$2,$3,$4) RETURNING *`,
+    [data.name || "", data.email || "", data.subject || "", data.message || ""]
+  );
+  return rows[0];
 }
 
 module.exports = {
+  pool,
+  query,
+  // Reports
   getAllReports,
   getReportById,
   createReport,
   updateReportStatus,
+  // Feed
   getFeed,
   upsertFeedItem,
   deleteFeedItem,
+  // Stats
   computeStats,
-  getAllContactSubmissions,
-  createContactSubmission,
+  setCommunityMembers,
+  // Users
   getAllUsers,
   getUserById,
   getUserByEmail,
   createUser,
   updateUser,
+  // Contact
+  getAllContactSubmissions,
+  createContactSubmission,
 };

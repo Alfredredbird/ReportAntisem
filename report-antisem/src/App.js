@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import Dashboard from "./Dashboard";
 
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
-const API_BASE = "http://localhost:3001"; // ← http not https for local dev
+const API_BASE = "http://192.168.12.187:3001"; // ← http not https for local dev
 // GET  /api/stats          → { reports_submitted, cases_resolved_pct, states_covered, community_members }
 // GET  /api/reports/recent → [{ location, type, time, status }, ...]
 // POST /api/reports        → { type, date, location, org, description, contact, anonymous, links[] }

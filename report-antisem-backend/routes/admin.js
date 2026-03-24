@@ -135,7 +135,7 @@ router.patch("/reports/:id", async (req, res) => {
   }
 });
 
-router.patch("/reports/:id/status", async (req, res) => {
+router.patch("/reports/:id/status", requireAdmin, async (req, res) => {
   const VALID = ["Under Review", "In Progress", "Resolved", "Dismissed"];
   const { status } = req.body;
   if (!status || !VALID.includes(status)) {
@@ -316,6 +316,20 @@ router.get("/contact", requireAdmin, async (_req, res) => {
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: "Failed to fetch messages" });
+  }
+});
+
+router.delete("/contact/:id", requireAdmin, async (req, res) => {
+  try {
+    const { rowCount } = await db.query(
+      "DELETE FROM contact_submissions WHERE id = $1",
+      [req.params.id]
+    );
+    if (rowCount === 0) return res.status(404).json({ error: "Message not found" });
+    return res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Failed to delete message" });
   }
 });
 

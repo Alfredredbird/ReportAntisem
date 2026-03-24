@@ -66,6 +66,7 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
   const [editReport,  setEditReport]  = useState(null);
   const [editUser,    setEditUser]    = useState(null);
   const [viewReport,  setViewReport]  = useState(null);
+  const [viewSubs,    setViewSubs]    = useState([]);    // submissions loaded when view modal opens
   const [deleteTarget, setDeleteTarget] = useState(null); // { kind: "report"|"user", id, label }
   const [saving,      setSaving]      = useState(false);
   const [toast,       setToast]       = useState(null);
@@ -142,16 +143,29 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
     finally { setSaving(false); }
   };
 
-  const changeStatus = async (id, status) => {
+  const openView = async (r) => {
+    setViewReport(r);
+    setViewSubs([]);
     try {
-      await apiFetch(`/api/admin/reports/${id}/status`, {
-        method: "PATCH",
-        body: JSON.stringify({ status }),
-      });
-      showToast(`Status → ${status}`);
-      loadAll();
-    } catch (e) { showToast(e.message, "error"); }
+      const subs = await apiFetch(`/api/admin/submissions/report/${r.id}`);
+      // Only show approved submissions in the view modal
+      setViewSubs(Array.isArray(subs) ? subs.filter(s => s.status === "approved") : []);
+    } catch {
+      // silently ignore — submissions just won't appear
+    }
   };
+    const changeStatus = async (id, status) => {
+  try {
+    await apiFetch(`/api/admin/reports/${id}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    });
+    showToast(`Status → ${status}`);
+    loadAll();
+  } catch (e) {
+    showToast(e.message, "error");
+  }
+};
 
   // ── User actions ────────────────────────────────────────────────────────────
   const saveUser = async () => {
@@ -173,13 +187,12 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
     if (!deleteTarget) return;
     setSaving(true);
     try {
-      await apiFetch(
-        deleteTarget.kind === "report"
-          ? `/api/admin/reports/${deleteTarget.id}`
-          : `/api/admin/users/${deleteTarget.id}`,
-        { method: "DELETE" }
-      );
-      showToast(`${deleteTarget.kind === "report" ? "Report" : "User"} deleted`);
+      const path =
+        deleteTarget.kind === "report"  ? `/api/admin/reports/${deleteTarget.id}`  :
+        deleteTarget.kind === "user"    ? `/api/admin/users/${deleteTarget.id}`    :
+        `/api/admin/contact/${deleteTarget.id}`;
+      await apiFetch(path, { method: "DELETE" });
+      showToast(`${deleteTarget.kind === "report" ? "Report" : deleteTarget.kind === "user" ? "User" : "Message"} deleted`);
       setDeleteTarget(null);
       loadAll();
     } catch (e) { showToast(e.message, "error"); }
@@ -433,16 +446,20 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
                         <div style={{ fontSize: 13, color: "rgba(255,255,255,.55)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.location || "—"}</div>
                         <div style={{ fontSize: 12, color: "rgba(255,255,255,.4)" }}>{r.created_at ? new Date(r.created_at).toLocaleDateString() : "—"}</div>
                         <div>
-                          <select
-                            value={r.status}
-                            onChange={e => changeStatus(r.id, e.target.value)}
-                            style={{ ...INPUT, padding: "5px 8px", fontSize: 12, width: "auto", cursor: "pointer" }}
-                          >
-                            {VALID_STATUSES.map(s => <option key={s}>{s}</option>)}
-                          </select>
+                          {isAdmin ? (
+                            <select
+                              value={r.status}
+                              onChange={e => changeStatus(r.id, e.target.value)}
+                              style={{ ...INPUT, padding: "5px 8px", fontSize: 12, width: "auto", cursor: "pointer" }}
+                            >
+                              {VALID_STATUSES.map(s => <option key={s}>{s}</option>)}
+                            </select>
+                          ) : (
+                            <Badge status={r.status} />
+                          )}
                         </div>
                         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                          <button className="db-btn" style={{ padding: "5px 10px", fontSize: 12 }} onClick={() => setViewReport(r)} title="View">👁</button>
+                          <button className="db-btn" style={{ padding: "5px 10px", fontSize: 12 }} onClick={() => openView(r)} title="View">👁</button>
                           <button className="db-btn" style={{ padding: "5px 10px", fontSize: 12 }} onClick={() => setEditReport({ ...r })} title="Edit">✏️</button>
                           {/* Team: Submit for Review — Admin: delete */}
                           {!isAdmin && (
@@ -529,6 +546,10 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
                           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                             {c.subject && <span style={{ fontSize: 12, background: "rgba(232,197,109,.1)", border: "1px solid rgba(232,197,109,.2)", borderRadius: 100, padding: "2px 10px", color: "#e8c56d" }}>{c.subject}</span>}
                             <span style={{ fontSize: 11, color: "rgba(255,255,255,.3)" }}>{c.created_at ? new Date(c.created_at).toLocaleString() : ""}</span>
+                            <button className="db-btn red" style={{ padding: "4px 9px", fontSize: 12 }}
+                              onClick={() => setDeleteTarget({ kind: "message", id: c.id, label: `message from ${c.name || c.email}` })}>
+                              🗑
+                            </button>
                           </div>
                         </div>
                         <p style={{ fontSize: 14, color: "rgba(255,255,255,.6)", lineHeight: 1.65 }}>{c.message}</p>
@@ -641,28 +662,32 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
 
       {/* ── View Report Modal ── */}
       {viewReport && (
-        <Modal title="Report Details" onClose={() => setViewReport(null)}>
+        <Modal title="Report Details" onClose={() => { setViewReport(null); setViewSubs([]); }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+
+            {/* Core report fields */}
             {[
-              ["ID",          viewReport.id],
-              ["Type",        viewReport.type],
-              ["Status",      null, <Badge status={viewReport.status} />],
-              ["Location",    viewReport.location],
-              ["Date",        viewReport.date || "—"],
-              ["Organization",viewReport.org  || "—"],
-              ["Anonymous",   viewReport.anonymous ? "Yes" : "No"],
-              ["Source",      viewReport.source],
-              ["Submitted",   viewReport.created_at ? new Date(viewReport.created_at).toLocaleString() : "—"],
+              ["ID",           viewReport.id],
+              ["Type",         viewReport.type],
+              ["Status",       null, <Badge status={viewReport.status} />],
+              ["Location",     viewReport.location],
+              ["Date",         viewReport.date || "—"],
+              ["Organization", viewReport.org  || "—"],
+              ["Anonymous",    viewReport.anonymous ? "Yes" : "No"],
+              ["Source",       viewReport.source],
+              ["Submitted",    viewReport.created_at ? new Date(viewReport.created_at).toLocaleString() : "—"],
             ].map(([label, val, node]) => (
               <div key={label}>
                 <div style={LABEL}>{label}</div>
                 <div style={{ fontSize: 14, color: "rgba(255,255,255,.75)" }}>{node || val}</div>
               </div>
             ))}
+
             <div>
               <div style={LABEL}>Description</div>
               <div style={{ fontSize: 14, color: "rgba(255,255,255,.75)", lineHeight: 1.6, background: "rgba(255,255,255,.03)", borderRadius: 8, padding: 12 }}>{viewReport.description}</div>
             </div>
+
             {viewReport.links?.length > 0 && (
               <div>
                 <div style={LABEL}>Evidence Links</div>
@@ -673,6 +698,76 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
                 </div>
               </div>
             )}
+
+            {/* ── Approved Submissions ── */}
+            {viewSubs.length > 0 && (
+              <div style={{ marginTop: 8 }}>
+                <div style={{ height: 1, background: "rgba(255,255,255,.08)", marginBottom: 18 }} />
+                <div style={{ fontSize: 13, fontWeight: 600, color: "#10b981", marginBottom: 14, display: "flex", alignItems: "center", gap: 7 }}>
+                  <span style={{ fontSize: 16 }}>✅</span> {viewSubs.length} Approved Submission{viewSubs.length !== 1 ? "s" : ""}
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                  {viewSubs.map((s, i) => {
+                    const images = typeof s.image_links === "string"
+                      ? JSON.parse(s.image_links || "[]")
+                      : (s.image_links || []);
+
+                    return (
+                      <div key={s.id} style={{ background: "rgba(16,185,129,.04)", border: "1px solid rgba(16,185,129,.18)", borderRadius: 12, padding: "16px 18px" }}>
+
+                        {/* Submission meta */}
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
+                          <div style={{ fontSize: 12, color: "rgba(255,255,255,.45)" }}>
+                            Submitted by <span style={{ color: "#e8c56d", fontWeight: 600 }}>{s.submitter_name}</span>
+                            <span style={{ margin: "0 6px", opacity: 0.4 }}>·</span>
+                            {s.created_at ? new Date(s.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : ""}
+                          </div>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: "#10b981", background: "rgba(16,185,129,.12)", border: "1px solid rgba(16,185,129,.25)", borderRadius: 100, padding: "2px 9px" }}>approved</span>
+                        </div>
+
+                        {/* Markdown notes */}
+                        <div style={{ background: "rgba(0,0,0,.2)", borderRadius: 8, padding: "12px 14px", marginBottom: images.length > 0 ? 12 : 0 }}>
+                          <div style={{ fontSize: 10, color: "rgba(255,255,255,.3)", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 7 }}>Notes</div>
+                          <pre style={{ fontSize: 13, color: "rgba(255,255,255,.72)", lineHeight: 1.7, whiteSpace: "pre-wrap", wordBreak: "break-word", margin: 0, fontFamily: "monospace" }}>{s.markdown}</pre>
+                        </div>
+
+                        {/* Image links */}
+                        {images.length > 0 && (
+                          <div style={{ marginBottom: s.admin_note ? 12 : 0 }}>
+                            <div style={{ fontSize: 10, color: "rgba(255,255,255,.3)", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 7 }}>Image Evidence</div>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                              {images.map((url, j) => (
+                                <a key={j} href={url} target="_blank" rel="noreferrer"
+                                  style={{ fontSize: 13, color: "#e8c56d", wordBreak: "break-all", display: "flex", alignItems: "center", gap: 6 }}>
+                                  <span>🖼</span>{url}
+                                </a>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Admin note */}
+                        {s.admin_note && (
+                          <div style={{ marginTop: 12, background: "rgba(16,185,129,.06)", border: "1px solid rgba(16,185,129,.15)", borderRadius: 8, padding: "10px 12px" }}>
+                            <div style={{ fontSize: 10, color: "#10b981", fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 5 }}>Admin Note</div>
+                            <div style={{ fontSize: 13, color: "rgba(255,255,255,.62)" }}>{s.admin_note}</div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* No approved submissions yet */}
+            {viewSubs.length === 0 && (
+              <div style={{ marginTop: 4, padding: "12px 14px", background: "rgba(255,255,255,.02)", border: "1px solid rgba(255,255,255,.06)", borderRadius: 10, fontSize: 13, color: "rgba(255,255,255,.3)", textAlign: "center" }}>
+                No approved submissions for this report yet.
+              </div>
+            )}
+
           </div>
         </Modal>
       )}
@@ -726,7 +821,7 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
 
       {/* ── Delete Confirmation Modal ── */}
       {deleteTarget && (
-        <Modal title={`Delete ${deleteTarget.kind === "report" ? "Report" : "User"}`} onClose={() => setDeleteTarget(null)}>
+        <Modal title={`Delete ${deleteTarget.kind === "report" ? "Report" : deleteTarget.kind === "user" ? "User" : "Message"}`} onClose={() => setDeleteTarget(null)}>
           <p style={{ fontSize: 15, color: "rgba(255,255,255,.65)", marginBottom: 24, lineHeight: 1.6 }}>
             Are you sure you want to permanently delete <strong style={{ color: "#f0eee8" }}>{deleteTarget.label}</strong>? This action cannot be undone.
           </p>

@@ -379,4 +379,8 @@ module.exports = {
   getAllSubmissions,
   createSubmission,
   reviewSubmission,
+  storeResetToken,
+  validateResetToken,
+  consumeResetToken,
+  cleanExpiredResetTokens,
 };

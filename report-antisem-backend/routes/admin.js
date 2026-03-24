@@ -54,11 +54,12 @@ router.use(requireAuth);
 // ── Dashboard summary stats ───────────────────────────────────────────────────
 router.get("/stats", async (_req, res) => {
   try {
-    const [reports, users, contacts, feed] = await Promise.all([
+    const [reports, users, contacts, feed, pending] = await Promise.all([
       db.getAllReports(),
       db.getAllUsers(),
       db.getAllContactSubmissions(),
       db.getFeed(),
+      db.getAllPendingSubmissions(),
     ]);
 
     const byStatus = reports.reduce((acc, r) => {
@@ -71,7 +72,6 @@ router.get("/stats", async (_req, res) => {
       return acc;
     }, {});
 
-    // Last 7 days report counts
     const now = Date.now();
     const daily = Array.from({ length: 7 }, (_, i) => {
       const day = new Date(now - i * 86400000);
@@ -85,10 +85,11 @@ router.get("/stats", async (_req, res) => {
 
     return res.json({
       totals: {
-        reports:  reports.length,
-        users:    users.length,
-        contacts: contacts.length,
-        feed:     feed.length,
+        reports:     reports.length,
+        users:       users.length,
+        contacts:    contacts.length,
+        feed:        feed.length,
+        pendingSubs: pending.length,
       },
       byStatus,
       byType,
@@ -150,7 +151,7 @@ router.patch("/reports/:id/status", async (req, res) => {
   }
 });
 
-router.delete("/reports/:id", async (req, res) => {
+router.delete("/reports/:id", requireAdmin, async (req, res) => {
   try {
     const { rowCount } = await db.query("DELETE FROM reports WHERE id = $1", [req.params.id]);
     if (rowCount === 0) return res.status(404).json({ error: "Report not found" });
@@ -158,6 +159,114 @@ router.delete("/reports/:id", async (req, res) => {
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: "Failed to delete report" });
+  }
+});
+
+// ── Report Submissions ────────────────────────────────────────────────────────
+
+// GET /api/admin/submissions — all submissions (admin sees all, team sees own)
+router.get("/submissions", async (req, res) => {
+  try {
+    const all = await db.getAllSubmissions();
+    // team members only see their own submissions
+    if (req.user.role === "team") {
+      return res.json(all.filter(s => s.submitted_by === req.user.id));
+    }
+    return res.json(all);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Failed to fetch submissions" });
+  }
+});
+
+// GET /api/admin/submissions/pending — pending queue (admin only)
+router.get("/submissions/pending", requireAdmin, async (_req, res) => {
+  try {
+    return res.json(await db.getAllPendingSubmissions());
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Failed to fetch pending submissions" });
+  }
+});
+
+// GET /api/admin/submissions/report/:reportId — submissions for a single report
+router.get("/submissions/report/:reportId", async (req, res) => {
+  try {
+    const subs = await db.getSubmissionsByReport(req.params.reportId);
+    // team members only see their own
+    if (req.user.role === "team") {
+      return res.json(subs.filter(s => s.submitted_by === req.user.id));
+    }
+    return res.json(subs);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Failed to fetch submissions" });
+  }
+});
+
+// POST /api/admin/submissions — team member submits notes for review
+// Body: { reportId, markdown, imageLinks[] }
+router.post("/submissions", async (req, res) => {
+  const { reportId, markdown, imageLinks } = req.body;
+  if (!reportId)  return res.status(400).json({ error: "reportId is required" });
+  if (!markdown?.trim()) return res.status(400).json({ error: "markdown content is required" });
+
+  // Validate image links (must be valid URLs or empty)
+  const links = Array.isArray(imageLinks) ? imageLinks.filter(Boolean) : [];
+  for (const l of links) {
+    try { new URL(l); } catch {
+      return res.status(400).json({ error: `Invalid URL: ${l}` });
+    }
+  }
+
+  try {
+    // Fetch submitter's name from DB
+    const submitter = await db.getUserById(req.user.id);
+    const sub = await db.createSubmission({
+      reportId,
+      submittedBy:   req.user.id,
+      submitterName: submitter?.name || req.user.email,
+      markdown,
+      imageLinks:    links,
+    });
+    console.log(`[SUBMISSION] ${sub.id} by ${sub.submitter_name} for report ${reportId}`);
+    return res.status(201).json({ success: true, submission: sub });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Failed to create submission" });
+  }
+});
+
+// PATCH /api/admin/submissions/:id/review — admin approves or denies
+// Body: { decision: "approved"|"denied", adminNote? }
+// If approved → marks the report as "Resolved"
+// If denied   → leaves report status unchanged, records note
+router.patch("/submissions/:id/review", requireAdmin, async (req, res) => {
+  const { decision, adminNote } = req.body;
+  if (!["approved", "denied"].includes(decision)) {
+    return res.status(400).json({ error: "decision must be 'approved' or 'denied'" });
+  }
+
+  try {
+    const updated = await db.reviewSubmission(req.params.id, {
+      status:     decision,
+      adminNote:  adminNote || "",
+      reviewedBy: req.user.id,
+    });
+    if (!updated) return res.status(404).json({ error: "Submission not found" });
+
+    // If approved, mark the parent report as Resolved
+    if (decision === "approved") {
+      await db.updateReportStatus(updated.report_id, "Resolved");
+      console.log(`[APPROVED] Submission ${updated.id} → report ${updated.report_id} marked Resolved`);
+    } else {
+      console.log(`[DENIED] Submission ${updated.id} by admin`);
+    }
+
+    return res.json({ success: true, submission: updated });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Failed to review submission" });
   }
 });
 

@@ -75,6 +75,15 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
   const [reportSearch, setReportSearch] = useState("");
   const [userSearch,   setUserSearch]   = useState("");
 
+  // Submissions
+  const [submissions,    setSubmissions]    = useState([]);
+  const [submitModal,    setSubmitModal]    = useState(null); // report object when open
+  const [subForm,        setSubForm]        = useState({ markdown: "", imageLinks: [""] });
+  const [subSaving,      setSubSaving]      = useState(false);
+  const [reviewModal,    setReviewModal]    = useState(null); // submission object
+  const [reviewDecision, setReviewDecision] = useState("approved");
+  const [reviewNote,     setReviewNote]     = useState("");
+
   const showToast = (msg, type = "success") => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3000);
@@ -93,12 +102,14 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [r, s] = await Promise.all([
+      const [r, s, subs] = await Promise.all([
         apiFetch("/api/admin/reports"),
         apiFetch("/api/admin/stats"),
+        apiFetch("/api/admin/submissions"),
       ]);
       setReports(r);
       setSummary(s);
+      setSubmissions(subs);
       if (isAdmin) {
         const [u, c] = await Promise.all([
           apiFetch("/api/admin/users"),
@@ -175,7 +186,42 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
     finally { setSaving(false); }
   };
 
-  // ── Filtered data ───────────────────────────────────────────────────────────
+  // ── Submission actions ──────────────────────────────────────────────────────
+  const submitForReview = async () => {
+    if (!submitModal || !subForm.markdown.trim()) return;
+    setSubSaving(true);
+    try {
+      const imageLinks = subForm.imageLinks.filter(l => l.trim());
+      await apiFetch("/api/admin/submissions", {
+        method: "POST",
+        body: JSON.stringify({ reportId: submitModal.id, markdown: subForm.markdown, imageLinks }),
+      });
+      showToast("Submission sent for admin review");
+      setSubmitModal(null);
+      setSubForm({ markdown: "", imageLinks: [""] });
+      loadAll();
+    } catch (e) { showToast(e.message, "error"); }
+    finally { setSubSaving(false); }
+  };
+
+  const handleReview = async () => {
+    if (!reviewModal) return;
+    setSubSaving(true);
+    try {
+      await apiFetch(`/api/admin/submissions/${reviewModal.id}/review`, {
+        method: "PATCH",
+        body: JSON.stringify({ decision: reviewDecision, adminNote: reviewNote }),
+      });
+      showToast(reviewDecision === "approved" ? "✓ Approved — report marked Resolved" : "Submission denied");
+      setReviewModal(null);
+      setReviewNote("");
+      setReviewDecision("approved");
+      loadAll();
+    } catch (e) { showToast(e.message, "error"); }
+    finally { setSubSaving(false); }
+  };
+
+  const pendingCount = submissions.filter(s => s.status === "pending").length;
   const filteredReports = reports.filter(r => {
     const matchStatus = reportFilter === "all" || r.status === reportFilter;
     const q = reportSearch.toLowerCase();
@@ -190,8 +236,9 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
 
   // ── Sidebar tabs ────────────────────────────────────────────────────────────
   const tabs = [
-    { id: "overview", icon: "📊", label: "Overview" },
-    { id: "reports",  icon: "📋", label: "Reports",  count: reports.length },
+    { id: "overview",    icon: "📊", label: "Overview" },
+    { id: "reports",     icon: "📋", label: "Reports",     count: reports.length },
+    { id: "submissions", icon: "📨", label: "Submissions", count: pendingCount > 0 ? pendingCount : submissions.length, urgent: pendingCount > 0 },
     ...(isAdmin ? [
       { id: "users",    icon: "👥", label: "Users",    count: users.length },
       { id: "messages", icon: "✉️", label: "Messages", count: contacts.length },
@@ -255,7 +302,7 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
                 <span style={{ fontSize: 15 }}>{t.icon}</span>
                 <span style={{ flex: 1, fontSize: 13 }}>{t.label}</span>
                 {t.count !== undefined && (
-                  <span style={{ fontSize: 11, background: "rgba(255,255,255,.08)", borderRadius: 100, padding: "1px 7px", color: "rgba(255,255,255,.5)" }}>{t.count}</span>
+                  <span style={{ fontSize: 11, background: t.urgent ? "rgba(239,68,68,.2)" : "rgba(255,255,255,.08)", border: t.urgent ? "1px solid rgba(239,68,68,.4)" : "none", borderRadius: 100, padding: "1px 7px", color: t.urgent ? "#ef4444" : "rgba(255,255,255,.5)", fontWeight: t.urgent ? 700 : 400 }}>{t.count}</span>
                 )}
               </button>
             ))}
@@ -280,10 +327,11 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
                   {/* Summary cards */}
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(180px,1fr))", gap: 14, marginBottom: 32 }}>
                     {[
-                      { label: "Total Reports", value: summary.totals.reports,  icon: "📋", color: "#e8c56d" },
-                      { label: "Users",          value: summary.totals.users,    icon: "👥", color: "#3b82f6" },
-                      { label: "Messages",       value: summary.totals.contacts, icon: "✉️", color: "#a78bfa" },
-                      { label: "Feed Items",     value: summary.totals.feed,     icon: "📡", color: "#10b981" },
+                      { label: "Total Reports",      value: summary.totals.reports,     icon: "📋", color: "#e8c56d" },
+                      { label: "Users",               value: summary.totals.users,       icon: "👥", color: "#3b82f6" },
+                      { label: "Messages",            value: summary.totals.contacts,    icon: "✉️", color: "#a78bfa" },
+                      { label: "Feed Items",          value: summary.totals.feed,        icon: "📡", color: "#10b981" },
+                      { label: "Pending Submissions", value: summary.totals.pendingSubs, icon: "📨", color: summary.totals.pendingSubs > 0 ? "#ef4444" : "#6b7280" },
                     ].map((c, i) => (
                       <div key={i} style={{ background: "rgba(255,255,255,.03)", border: `1px solid ${c.color}22`, borderRadius: 14, padding: "20px 18px" }}>
                         <div style={{ fontSize: 26, marginBottom: 8 }}>{c.icon}</div>
@@ -393,10 +441,19 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
                             {VALID_STATUSES.map(s => <option key={s}>{s}</option>)}
                           </select>
                         </div>
-                        <div style={{ display: "flex", gap: 6 }}>
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                           <button className="db-btn" style={{ padding: "5px 10px", fontSize: 12 }} onClick={() => setViewReport(r)} title="View">👁</button>
                           <button className="db-btn" style={{ padding: "5px 10px", fontSize: 12 }} onClick={() => setEditReport({ ...r })} title="Edit">✏️</button>
-                          <button className="db-btn red" style={{ padding: "5px 10px", fontSize: 12 }} onClick={() => setDeleteTarget({ kind: "report", id: r.id, label: r.type })} title="Delete">🗑</button>
+                          {/* Team: Submit for Review — Admin: delete */}
+                          {!isAdmin && (
+                            <button className="db-btn" style={{ padding: "5px 10px", fontSize: 12, background: "rgba(232,197,109,.08)", border: "1px solid rgba(232,197,109,.25)", color: "#e8c56d" }}
+                              onClick={() => { setSubmitModal(r); setSubForm({ markdown: "", imageLinks: [""] }); }}
+                              title="Submit for Review"
+                            >📨</button>
+                          )}
+                          {isAdmin && (
+                            <button className="db-btn red" style={{ padding: "5px 10px", fontSize: 12 }} onClick={() => setDeleteTarget({ kind: "report", id: r.id, label: r.type })} title="Delete">🗑</button>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -481,6 +538,103 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
                 </div>
               )}
             </>
+          )}
+
+          {/* ── SUBMISSIONS TAB ── */}
+          {!loading && tab === "submissions" && (
+            <div style={{ animation: "fadeUp .4s ease both" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
+                <div>
+                  <h1 style={{ fontFamily: "'DM Serif Display',serif", fontSize: 28, marginBottom: 4 }}>
+                    {isAdmin ? "Review Queue" : "My Submissions"}
+                  </h1>
+                  <p style={{ color: "rgba(255,255,255,.4)", fontSize: 13 }}>
+                    {isAdmin
+                      ? `${pendingCount} pending review · ${submissions.length} total`
+                      : `${submissions.length} submission${submissions.length !== 1 ? "s" : ""} sent`}
+                  </p>
+                </div>
+                {!isAdmin && (
+                  <p style={{ fontSize: 13, color: "rgba(255,255,255,.38)", maxWidth: 340, lineHeight: 1.6 }}>
+                    Select a report from the Reports tab and click 📨 to submit notes for admin review.
+                  </p>
+                )}
+              </div>
+
+              {/* Pending banner for admin */}
+              {isAdmin && pendingCount > 0 && (
+                <div style={{ background: "rgba(239,68,68,.07)", border: "1px solid rgba(239,68,68,.25)", borderRadius: 12, padding: "13px 18px", marginBottom: 20, display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 18 }}>🔔</span>
+                  <span style={{ fontSize: 14, color: "#ef4444", fontWeight: 600 }}>{pendingCount} submission{pendingCount !== 1 ? "s" : ""} awaiting your review</span>
+                </div>
+              )}
+
+              {submissions.length === 0 && (
+                <div style={{ padding: "48px 0", textAlign: "center", color: "rgba(255,255,255,.25)", fontSize: 14 }}>
+                  No submissions yet.{!isAdmin && " Go to the Reports tab and click 📨 on a report to submit notes."}
+                </div>
+              )}
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                {submissions.map(s => {
+                  const isPending  = s.status === "pending";
+                  const isApproved = s.status === "approved";
+                  const statusCol  = isPending ? "#f59e0b" : isApproved ? "#10b981" : "#ef4444";
+                  const images     = typeof s.image_links === "string" ? JSON.parse(s.image_links || "[]") : (s.image_links || []);
+
+                  return (
+                    <div key={s.id} style={{ background: "rgba(255,255,255,.03)", border: `1px solid ${isPending ? "rgba(245,158,11,.2)" : "rgba(255,255,255,.07)"}`, borderRadius: 14, padding: "20px 22px" }}>
+                      {/* Header */}
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 3 }}>
+                            {s.report_type || "Report"} — <span style={{ color: "rgba(255,255,255,.5)", fontWeight: 400 }}>{s.report_location || "No location"}</span>
+                          </div>
+                          <div style={{ fontSize: 12, color: "rgba(255,255,255,.35)" }}>
+                            Submitted by <span style={{ color: "#e8c56d" }}>{s.submitter_name}</span> · {s.created_at ? new Date(s.created_at).toLocaleString() : ""}
+                          </div>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: statusCol, background: `${statusCol}18`, border: `1px solid ${statusCol}30`, borderRadius: 100, padding: "3px 10px", textTransform: "capitalize" }}>{s.status}</span>
+                          {isAdmin && isPending && (
+                            <button className="db-btn gold" style={{ padding: "5px 14px", fontSize: 12 }}
+                              onClick={() => { setReviewModal(s); setReviewDecision("approved"); setReviewNote(""); }}>
+                              Review →
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Markdown content rendered as pre-formatted */}
+                      <div style={{ background: "rgba(0,0,0,.25)", border: "1px solid rgba(255,255,255,.08)", borderRadius: 10, padding: "14px 16px", marginBottom: images.length > 0 ? 14 : 0 }}>
+                        <div style={{ fontSize: 11, color: "rgba(255,255,255,.3)", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 8 }}>Notes (Markdown)</div>
+                        <pre style={{ fontSize: 13, color: "rgba(255,255,255,.7)", lineHeight: 1.7, whiteSpace: "pre-wrap", wordBreak: "break-word", margin: 0, fontFamily: "monospace" }}>{s.markdown}</pre>
+                      </div>
+
+                      {/* Image links */}
+                      {images.length > 0 && (
+                        <div style={{ marginBottom: s.admin_note ? 14 : 0 }}>
+                          <div style={{ fontSize: 11, color: "rgba(255,255,255,.3)", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 8 }}>Image Links</div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                            {images.map((url, i) => (
+                              <a key={i} href={url} target="_blank" rel="noreferrer" style={{ fontSize: 13, color: "#e8c56d", wordBreak: "break-all" }}>🖼 {url}</a>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Admin note if reviewed */}
+                      {s.admin_note && (
+                        <div style={{ marginTop: 14, background: isApproved ? "rgba(16,185,129,.06)" : "rgba(239,68,68,.06)", border: `1px solid ${isApproved ? "rgba(16,185,129,.2)" : "rgba(239,68,68,.2)"}`, borderRadius: 10, padding: "12px 14px" }}>
+                          <div style={{ fontSize: 11, color: isApproved ? "#10b981" : "#ef4444", fontWeight: 600, marginBottom: 4 }}>Admin Note ({isApproved ? "Approved" : "Denied"})</div>
+                          <div style={{ fontSize: 13, color: "rgba(255,255,255,.6)" }}>{s.admin_note}</div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           )}
         </main>
       </div>
@@ -579,6 +733,142 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
           <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
             <button className="db-btn" onClick={() => setDeleteTarget(null)}>Cancel</button>
             <button className="db-btn red" onClick={confirmDelete} disabled={saving} style={{ fontWeight: 700 }}>{saving ? <Spinner /> : "Delete Permanently"}</button>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── Submit for Review Modal (team only) ── */}
+      {submitModal && (
+        <Modal title={`Submit for Review — ${submitModal.type}`} onClose={() => setSubmitModal(null)}>
+          <p style={{ fontSize: 13, color: "rgba(255,255,255,.45)", marginBottom: 20, lineHeight: 1.6 }}>
+            Write your notes in Markdown and optionally add image links. An admin will review and either approve (marking the report <strong style={{ color: "#10b981" }}>Resolved</strong>) or deny your submission.
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            {/* Markdown editor */}
+            <div>
+              <label style={LABEL}>Notes (Markdown) *</label>
+              <textarea
+                className="db-input"
+                rows={10}
+                placeholder={`# Summary\n\nDescribe what was found or resolved...\n\n## Evidence\n- Link 1\n- Link 2\n\n## Outcome\nWhat action was taken?`}
+                value={subForm.markdown}
+                onChange={e => setSubForm(p => ({ ...p, markdown: e.target.value }))}
+                style={{ resize: "vertical", fontFamily: "monospace", fontSize: 13 }}
+              />
+              <div style={{ fontSize: 11, color: "rgba(255,255,255,.25)", marginTop: 5 }}>Supports Markdown: **bold**, *italic*, # headings, - lists</div>
+            </div>
+
+            {/* Image links */}
+            <div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <label style={LABEL}>Image Links <span style={{ color: "rgba(255,255,255,.28)", fontWeight: 400 }}>({subForm.imageLinks.filter(l => l.trim()).length}/10)</span></label>
+                {subForm.imageLinks.length < 10 && (
+                  <button className="db-btn" style={{ fontSize: 12, padding: "3px 10px" }}
+                    onClick={() => setSubForm(p => ({ ...p, imageLinks: [...p.imageLinks, ""] }))}>
+                    + Add
+                  </button>
+                )}
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {subForm.imageLinks.map((link, i) => (
+                  <div key={i} style={{ display: "flex", gap: 8 }}>
+                    <input
+                      className="db-input"
+                      type="url"
+                      placeholder={`https://example.com/screenshot-${i + 1}.png`}
+                      value={link}
+                      onChange={e => setSubForm(p => ({ ...p, imageLinks: p.imageLinks.map((l, x) => x === i ? e.target.value : l) }))}
+                      style={{ flex: 1 }}
+                    />
+                    <button
+                      className="db-btn red"
+                      style={{ width: 36, flexShrink: 0, padding: 0, fontSize: 16 }}
+                      onClick={() => setSubForm(p => ({ ...p, imageLinks: p.imageLinks.filter((_, x) => x !== i) }))}
+                    >×</button>
+                  </div>
+                ))}
+                {subForm.imageLinks.length === 0 && (
+                  <button className="db-btn" style={{ fontSize: 12, width: "100%", border: "1px dashed rgba(255,255,255,.12)" }}
+                    onClick={() => setSubForm(p => ({ ...p, imageLinks: [""] }))}>
+                    + Add an image link
+                  </button>
+                )}
+              </div>
+              <div style={{ fontSize: 11, color: "rgba(255,255,255,.25)", marginTop: 5 }}>Direct URLs to screenshots, photos, or other image evidence</div>
+            </div>
+
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 4 }}>
+              <button className="db-btn" onClick={() => setSubmitModal(null)}>Cancel</button>
+              <button className="db-btn gold" onClick={submitForReview} disabled={subSaving || !subForm.markdown.trim()}>
+                {subSaving ? <Spinner /> : "Submit for Review →"}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── Admin Review Modal ── */}
+      {reviewModal && (
+        <Modal title="Review Submission" onClose={() => setReviewModal(null)}>
+          {/* Submission info */}
+          <div style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.07)", borderRadius: 10, padding: "14px 16px", marginBottom: 18 }}>
+            <div style={{ fontSize: 12, color: "rgba(255,255,255,.35)", marginBottom: 4 }}>From <span style={{ color: "#e8c56d" }}>{reviewModal.submitter_name}</span> · {reviewModal.created_at ? new Date(reviewModal.created_at).toLocaleString() : ""}</div>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>{reviewModal.report_type} — {reviewModal.report_location}</div>
+            <pre style={{ fontSize: 13, color: "rgba(255,255,255,.7)", lineHeight: 1.65, whiteSpace: "pre-wrap", wordBreak: "break-word", margin: 0, fontFamily: "monospace", maxHeight: 200, overflowY: "auto" }}>{reviewModal.markdown}</pre>
+            {(() => {
+              const imgs = typeof reviewModal.image_links === "string" ? JSON.parse(reviewModal.image_links || "[]") : (reviewModal.image_links || []);
+              return imgs.length > 0 ? (
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ fontSize: 11, color: "rgba(255,255,255,.3)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.06em" }}>Image Links</div>
+                  {imgs.map((url, i) => <a key={i} href={url} target="_blank" rel="noreferrer" style={{ display: "block", fontSize: 12, color: "#e8c56d", wordBreak: "break-all", marginBottom: 3 }}>🖼 {url}</a>)}
+                </div>
+              ) : null;
+            })()}
+          </div>
+
+          {/* Decision */}
+          <div style={{ marginBottom: 16 }}>
+            <label style={LABEL}>Decision</label>
+            <div style={{ display: "flex", gap: 10 }}>
+              {[
+                { val: "approved", label: "✓ Approve", color: "#10b981" },
+                { val: "denied",   label: "✕ Deny",    color: "#ef4444" },
+              ].map(opt => (
+                <button key={opt.val} onClick={() => setReviewDecision(opt.val)}
+                  style={{ flex: 1, padding: "10px", borderRadius: 9, border: `1px solid ${reviewDecision === opt.val ? opt.color : "rgba(255,255,255,.1)"}`, background: reviewDecision === opt.val ? `${opt.color}15` : "rgba(255,255,255,.03)", color: reviewDecision === opt.val ? opt.color : "rgba(255,255,255,.5)", fontFamily: "'Outfit',sans-serif", fontSize: 14, fontWeight: 600, cursor: "pointer", transition: "all .15s" }}>
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            {reviewDecision === "approved" && (
+              <div style={{ marginTop: 10, fontSize: 13, color: "rgba(16,185,129,.8)", background: "rgba(16,185,129,.06)", border: "1px solid rgba(16,185,129,.2)", borderRadius: 8, padding: "8px 12px" }}>
+                ✓ Approving will automatically mark this report as <strong>Resolved</strong>.
+              </div>
+            )}
+          </div>
+
+          {/* Admin note */}
+          <div style={{ marginBottom: 18 }}>
+            <label style={LABEL}>Note to team member <span style={{ color: "rgba(255,255,255,.28)", fontWeight: 400 }}>(optional)</span></label>
+            <textarea
+              className="db-input"
+              rows={3}
+              placeholder={reviewDecision === "approved" ? "Great work — report confirmed resolved." : "Please provide more evidence before this can be approved."}
+              value={reviewNote}
+              onChange={e => setReviewNote(e.target.value)}
+              style={{ resize: "none" }}
+            />
+          </div>
+
+          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+            <button className="db-btn" onClick={() => setReviewModal(null)}>Cancel</button>
+            <button
+              onClick={handleReview}
+              disabled={subSaving}
+              style={{ background: reviewDecision === "approved" ? "linear-gradient(135deg,#10b981,#059669)" : "linear-gradient(135deg,#ef4444,#dc2626)", border: "none", borderRadius: 9, padding: "10px 22px", color: "#fff", fontFamily: "'Outfit',sans-serif", fontSize: 14, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}
+            >
+              {subSaving ? <Spinner /> : reviewDecision === "approved" ? "Approve Submission" : "Deny Submission"}
+            </button>
           </div>
         </Modal>
       )}

@@ -246,6 +246,65 @@ async function createContactSubmission(data) {
   return rows[0];
 }
 
+// ── Report Submissions (team → admin review) ──────────────────────────────────
+async function getSubmissionsByReport(reportId) {
+  const { rows } = await query(
+    "SELECT * FROM report_submissions WHERE report_id = $1 ORDER BY created_at DESC",
+    [reportId]
+  );
+  return rows;
+}
+
+async function getAllPendingSubmissions() {
+  const { rows } = await query(
+    `SELECT rs.*, r.type AS report_type, r.location AS report_location
+     FROM report_submissions rs
+     JOIN reports r ON r.id = rs.report_id
+     WHERE rs.status = 'pending'
+     ORDER BY rs.created_at ASC`
+  );
+  return rows;
+}
+
+async function getAllSubmissions() {
+  const { rows } = await query(
+    `SELECT rs.*, r.type AS report_type, r.location AS report_location
+     FROM report_submissions rs
+     JOIN reports r ON r.id = rs.report_id
+     ORDER BY rs.created_at DESC`
+  );
+  return rows;
+}
+
+async function createSubmission(data) {
+  const { rows } = await query(
+    `INSERT INTO report_submissions
+       (report_id, submitted_by, submitter_name, markdown, image_links)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING *`,
+    [
+      data.reportId,
+      data.submittedBy,
+      data.submitterName || "",
+      data.markdown      || "",
+      JSON.stringify(Array.isArray(data.imageLinks) ? data.imageLinks.filter(Boolean) : []),
+    ]
+  );
+  return rows[0];
+}
+
+async function reviewSubmission(id, { status, adminNote, reviewedBy }) {
+  // status must be 'approved' or 'denied'
+  const { rows } = await query(
+    `UPDATE report_submissions
+     SET status = $1, admin_note = $2, reviewed_by = $3, reviewed_at = NOW()
+     WHERE id = $4
+     RETURNING *`,
+    [status, adminNote || "", reviewedBy, id]
+  );
+  return rows[0] || null;
+}
+
 module.exports = {
   pool,
   query,
@@ -270,4 +329,10 @@ module.exports = {
   // Contact
   getAllContactSubmissions,
   createContactSubmission,
+  // Report submissions
+  getSubmissionsByReport,
+  getAllPendingSubmissions,
+  getAllSubmissions,
+  createSubmission,
+  reviewSubmission,
 };

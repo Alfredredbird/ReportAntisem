@@ -632,8 +632,8 @@ export default function App() {
           <section style={{ padding: mobile ? "0 16px 64px" : "0 48px 80px", maxWidth: 1060, margin: "0 auto" }}>
             <div style={{ display: "grid", gridTemplateColumns: mobile ? "repeat(2,1fr)" : "repeat(4,1fr)", gap: mobile ? 10 : 16 }}>
               {[
-                { num: "2024",  label: "Year Founded",        icon: "📅" },
-                { num: "50+",   label: "Partner Orgs",         icon: "🤝" },
+                { num: "2025",  label: "Year Founded",        icon: "📅" },
+                { num: "10+",   label: "Partner Orgs",         icon: "🤝" },
                 { num: "38",    label: "States Reached",       icon: "🗺️" },
                 { num: "100%",  label: "Volunteer-Led",        icon: "❤️" },
               ].map((s, i) => (
@@ -1014,7 +1014,7 @@ export default function App() {
           ))}
         </div>
         <div style={{ marginBottom: 4 }}>✡ ReportASA — Standing Against Antisemitism</div>
-        <div>All reports are confidential. © 2025 ReportASA. All rights reserved.</div>
+        <div>All reports are confidential. © 2026 ReportASA. All rights reserved.</div>
       </footer>
     </div>
   );

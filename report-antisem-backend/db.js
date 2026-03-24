@@ -293,6 +293,50 @@ async function createSubmission(data) {
   return rows[0];
 }
 
+async function storeResetToken(userId, jti) {
+  // Delete any existing reset tokens for this user first (1 active at a time)
+  await query("DELETE FROM password_reset_tokens WHERE user_id = $1", [userId]);
+ 
+  await query(
+    `INSERT INTO password_reset_tokens (user_id, jti, expires_at)
+     VALUES ($1, $2, NOW() + INTERVAL '1 hour')`,
+    [userId, jti]
+  );
+}
+ 
+/**
+ * Check that a reset token JTI is valid (exists + not expired).
+ * Returns true if valid, false otherwise.
+ */
+async function validateResetToken(userId, jti) {
+  const { rows } = await query(
+    `SELECT id FROM password_reset_tokens
+     WHERE user_id = $1 AND jti = $2 AND expires_at > NOW()`,
+    [userId, jti]
+  );
+  return rows.length > 0;
+}
+ 
+/**
+ * Mark a reset token as used by deleting it (single-use enforcement).
+ */
+async function consumeResetToken(userId, jti) {
+  await query(
+    "DELETE FROM password_reset_tokens WHERE user_id = $1 AND jti = $2",
+    [userId, jti]
+  );
+}
+ 
+/**
+ * Clean up expired tokens — call this periodically (e.g. daily cron job).
+ */
+async function cleanExpiredResetTokens() {
+  const { rowCount } = await query(
+    "DELETE FROM password_reset_tokens WHERE expires_at < NOW()"
+  );
+  return rowCount;
+}
+
 async function reviewSubmission(id, { status, adminNote, reviewedBy }) {
   // status must be 'approved' or 'denied'
   const { rows } = await query(

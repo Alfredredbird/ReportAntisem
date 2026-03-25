@@ -58,6 +58,7 @@ async function createReport(data) {
       data.anonymous   !== false,
       JSON.stringify(Array.isArray(data.links) ? data.links.filter(Boolean) : []),
       data.source      || "full_form",
+      data.reporterName || ""
     ]
   );
   return rows[0];

@@ -184,7 +184,7 @@ export default function App() {
   const [feed,     setFeed]     = useState(FALLBACK_REPORTS);
 
   // Full form
-  const blankForm = { type: "", date: "", location: "", org: "", description: "", contact: "", anonymous: true };
+  const blankForm = { type: "", date: "", location: "", org: "", description: "", contact: "", reporterName: "", anonymous: true };
   const [form,      setForm]      = useState(blankForm);
   const [links,     setLinks]     = useState([]);
   const [submitSt,  setSubmitSt]  = useState("idle");
@@ -704,6 +704,9 @@ export default function App() {
               <div><label style={LABEL}>Description of Incident *</label>
                 <textarea className="input-field" rows={6} placeholder="Describe what happened in as much detail as you're comfortable sharing..." style={{ resize: "vertical" }} value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} />
               </div>
+              <div><label style={LABEL}>Your Name <span style={{ color: "rgba(255,255,255,.3)", fontWeight: 400 }}>(optional)</span></label>
+  <input className="input-field" placeholder="First name or full name" value={form.reporterName} onChange={e => setForm(p => ({ ...p, reporterName: e.target.value }))} />
+</div>
               <LinkInputs links={links} setLinks={setLinks} />
               <div><label style={LABEL}>Contact Email (optional)</label>
                 <input className="input-field" type="email" placeholder="For follow-up if needed" value={form.contact} onChange={e => setForm(p => ({ ...p, contact: e.target.value }))} />

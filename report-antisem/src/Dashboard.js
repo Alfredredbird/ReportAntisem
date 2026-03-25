@@ -282,7 +282,7 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
   // ── Mobile card for a report ────────────────────────────────────────────────
   const ReportCard = ({ r }) => {
     const isExpanded = expandedReport === r.id;
-    const col = STATUS_COLORS[r.status]?.text || "#888";
+    
     return (
       <div style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.07)", borderRadius: 12, overflow: "hidden", marginBottom: 10 }}>
         {/* Card header — always visible */}

@@ -10,7 +10,7 @@ const VALID_STATUSES = ["Under Review", "In Progress", "Resolved", "Dismissed"];
 
 router.get("/", async (_req, res) => {
   try {
-    return res.json(await db.getFeed());
+    return res.json(await db.getLiveFeed(5));
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: "Failed to fetch feed" });

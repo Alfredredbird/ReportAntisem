@@ -22,7 +22,7 @@ const CATEGORIES = [
   { icon: "📰", title: "Media & Press",            desc: "Reporting biases in news and publications" },
 ];
 
-const STATUS_COLOR = { "Under Review": "#f59e0b", "Resolved": "#10b981", "In Progress": "#3b82f6" };
+const STATUS_COLOR = { "Under Review": "#f59e0b", "Resolved": "#10b981", "In Progress": "#3b82f6", "Dismissed": "#f63b4e" };
 const LABEL = { display: "block", fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.65)", marginBottom: 8, letterSpacing: "0.03em" };
 
 const FALLBACK_REPORTS = [

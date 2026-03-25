@@ -303,7 +303,28 @@ async function storeResetToken(userId, jti) {
     [userId, jti]
   );
 }
- 
+ async function getLiveFeed(limit = 5) {
+  const { rows } = await query(
+    `SELECT 
+       id,
+       location,
+       type,
+       status,
+       created_at,
+       CASE
+         WHEN created_at > NOW() - INTERVAL '1 hour'
+           THEN EXTRACT(EPOCH FROM (NOW() - created_at))::int / 60 || ' minutes ago'
+         WHEN created_at > NOW() - INTERVAL '24 hours'
+           THEN EXTRACT(EPOCH FROM (NOW() - created_at))::int / 3600 || ' hours ago'
+         ELSE EXTRACT(EPOCH FROM (NOW() - created_at))::int / 86400 || ' days ago'
+       END AS time
+     FROM reports
+     ORDER BY created_at DESC
+     LIMIT $1`,
+    [limit]
+  );
+  return rows;
+}
 /**
  * Check that a reset token JTI is valid (exists + not expired).
  * Returns true if valid, false otherwise.
@@ -383,4 +404,5 @@ module.exports = {
   validateResetToken,
   consumeResetToken,
   cleanExpiredResetTokens,
+  getLiveFeed
 };

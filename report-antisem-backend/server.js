@@ -47,10 +47,10 @@ const generalLimiter = rateLimit({
   message:          { error: "Too many requests, please try again later." },
 });
 
-// Report submission — 5 reports per hour per IP (prevents spam flooding)
+// Report submission — 10 reports per hour per IP (prevents spam flooding)
 const reportSubmitLimiter = rateLimit({
   windowMs:         60 * 60 * 1000,
-  max:              5,
+  max:              10,
   standardHeaders:  true,
   legacyHeaders:    false,
   message:          { error: "Too many reports submitted from this IP. Please wait before submitting again." },

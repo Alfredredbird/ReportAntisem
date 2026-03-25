@@ -45,20 +45,20 @@ async function getReportById(id) {
 async function createReport(data) {
   const { rows } = await query(
     `INSERT INTO reports
-      (type, date, location, org, description, contact, anonymous, links, source, status)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'Under Review')
+      (type, date, location, org, description, contact, anonymous, links, source, status, reporter_name)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'Under Review',$10)
      RETURNING *`,
     [
-      data.type        || "",
-      data.date        || null,
-      data.location    || "",
-      data.org         || "",
-      data.description || "",
-      data.contact     || "",
-      data.anonymous   !== false,
+      data.type         || "",
+      data.date         || null,
+      data.location     || "",
+      data.org          || "",
+      data.description  || "",
+      data.contact      || "",
+      data.anonymous    !== false,
       JSON.stringify(Array.isArray(data.links) ? data.links.filter(Boolean) : []),
-      data.source      || "full_form",
-      data.reporterName || ""
+      data.source       || "full_form",
+      data.reporterName || "",
     ]
   );
   return rows[0];

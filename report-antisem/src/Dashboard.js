@@ -1,11 +1,5 @@
 /**
- * Dashboard.jsx — Admin/Team dashboard (mobile-responsive)
- *
- * Props:
- *   user      – current user object
- *   API_BASE  – backend URL string
- *   onBack    – callback to go back to home
- *   onLogout  – callback to log out
+ * Dashboard.jsx — Admin/Team dashboard (mobile-responsive, enhanced analytics)
  */
 
 import { useState, useEffect, useCallback } from "react";
@@ -59,6 +53,105 @@ function Modal({ title, onClose, children, wide }) {
   );
 }
 
+// ── Mini bar chart component ──────────────────────────────────────────────────
+function MiniBarChart({ data, valueKey = "count", labelKey = "label", color = "#e8c56d", height = 80, showValues = false, accent }) {
+  const max = Math.max(...data.map(d => d[valueKey]), 1);
+  return (
+    <div style={{ display: "flex", alignItems: "flex-end", gap: 3, height, width: "100%" }}>
+      {data.map((d, i) => {
+        const pct = d[valueKey] / max;
+        const barH = Math.max(pct * (height - 20), d[valueKey] > 0 ? 4 : 2);
+        const isAccent = accent !== undefined && i === accent;
+        return (
+          <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }} title={`${d[labelKey]}: ${d[valueKey]}`}>
+            {showValues && d[valueKey] > 0 && (
+              <span style={{ fontSize: 9, color, fontWeight: 700, lineHeight: 1 }}>{d[valueKey]}</span>
+            )}
+            <div style={{
+              width: "100%",
+              height: barH,
+              background: isAccent
+                ? `linear-gradient(180deg, #fff, ${color})`
+                : d[valueKey] > 0
+                  ? `linear-gradient(180deg, ${color}, ${color}88)`
+                  : "rgba(255,255,255,.06)",
+              borderRadius: "3px 3px 0 0",
+              transition: "height .5s ease",
+            }} />
+            <span style={{ fontSize: 8, color: "rgba(255,255,255,.3)", textAlign: "center", lineHeight: 1.2, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {d[labelKey]}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Donut chart (SVG) ─────────────────────────────────────────────────────────
+function DonutChart({ data, size = 120 }) {
+  const COLORS = ["#e8c56d", "#3b82f6", "#10b981", "#a78bfa", "#f59e0b", "#ef4444", "#6b7280"];
+  const total = data.reduce((s, d) => s + d.value, 0);
+  if (total === 0) return <div style={{ width: size, height: size, display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,.2)", fontSize: 12 }}>No data</div>;
+
+  let cumAngle = -90;
+  const r = 42, cx = size / 2, cy = size / 2, stroke = 12;
+
+  const slices = data.map((d, i) => {
+    const angle = (d.value / total) * 360;
+    const startAngle = cumAngle;
+    cumAngle += angle;
+    const endAngle = cumAngle;
+    const toRad = (a) => (a * Math.PI) / 180;
+    const x1 = cx + r * Math.cos(toRad(startAngle));
+    const y1 = cy + r * Math.sin(toRad(startAngle));
+    const x2 = cx + r * Math.cos(toRad(endAngle));
+    const y2 = cy + r * Math.sin(toRad(endAngle));
+    const large = angle > 180 ? 1 : 0;
+    return { path: `M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2}`, color: COLORS[i % COLORS.length], label: d.label, value: d.value };
+  });
+
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(255,255,255,.05)" strokeWidth={stroke} />
+      {slices.map((s, i) => (
+        <path key={i} d={s.path} fill="none" stroke={s.color} strokeWidth={stroke} strokeLinecap="butt">
+          <title>{s.label}: {s.value}</title>
+        </path>
+      ))}
+      <text x={cx} y={cy - 5} textAnchor="middle" fill="#f0eee8" fontSize={16} fontWeight={700} fontFamily="'DM Serif Display',serif">{total}</text>
+      <text x={cx} y={cy + 10} textAnchor="middle" fill="rgba(255,255,255,.4)" fontSize={8}>TOTAL</text>
+    </svg>
+  );
+}
+
+// ── Stat delta pill ───────────────────────────────────────────────────────────
+function DeltaPill({ value }) {
+  if (value === undefined || value === null) return null;
+  const up = value >= 0;
+  return (
+    <span style={{ fontSize: 11, fontWeight: 700, color: up ? "#10b981" : "#ef4444", background: up ? "rgba(16,185,129,.1)" : "rgba(239,68,68,.1)", border: `1px solid ${up ? "rgba(16,185,129,.25)" : "rgba(239,68,68,.25)"}`, borderRadius: 100, padding: "2px 8px", whiteSpace: "nowrap" }}>
+      {up ? "▲" : "▼"} {Math.abs(value)}%
+    </span>
+  );
+}
+
+// ── Horizontal bar ────────────────────────────────────────────────────────────
+function HBar({ label, value, max, color = "#e8c56d" }) {
+  const pct = max > 0 ? (value / max) * 100 : 0;
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, alignItems: "center" }}>
+        <span style={{ fontSize: 12, color: "rgba(255,255,255,.65)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "65%" }}>{label}</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color, flexShrink: 0 }}>{value}</span>
+      </div>
+      <div style={{ height: 5, background: "rgba(255,255,255,.06)", borderRadius: 3 }}>
+        <div style={{ height: "100%", width: `${pct}%`, background: `linear-gradient(90deg, ${color}, ${color}88)`, borderRadius: 3, transition: "width .6s ease" }} />
+      </div>
+    </div>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
   const isAdmin = user?.role === "admin";
@@ -71,11 +164,13 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
   const [sidebarOpen,   setSidebarOpen]   = useState(false);
 
   // Data
-  const [reports,  setReports]  = useState([]);
-  const [users,    setUsers]    = useState([]);
-  const [contacts, setContacts] = useState([]);
-  const [summary,  setSummary]  = useState(null);
-  const [loading,  setLoading]  = useState(true);
+  const [reports,    setReports]    = useState([]);
+  const [users,      setUsers]      = useState([]);
+  const [contacts,   setContacts]   = useState([]);
+  const [summary,    setSummary]    = useState(null);
+  const [analytics,  setAnalytics]  = useState(null);
+  const [loading,    setLoading]    = useState(true);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
 
   // Editing
   const [editReport,   setEditReport]   = useState(null);
@@ -100,8 +195,8 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
   const [reviewDecision, setReviewDecision] = useState("approved");
   const [reviewNote,     setReviewNote]     = useState("");
 
-  // Mobile report expand
   const [expandedReport, setExpandedReport] = useState(null);
+  const [analyticsView,  setAnalyticsView]  = useState("trend"); // "trend"|"types"|"geo"|"time"
 
   const showToast = (msg, type = "success") => {
     setToast({ msg, type });
@@ -117,6 +212,18 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
     if (!res.ok) throw new Error((await res.json()).error || "Request failed");
     return res.json();
   }, [API_BASE]);
+
+  const loadAnalytics = useCallback(async () => {
+    setAnalyticsLoading(true);
+    try {
+      const data = await apiFetch("/api/stats/analytics");
+      setAnalytics(data);
+    } catch (e) {
+      // analytics endpoint optional — fail silently
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  }, [apiFetch]);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -146,11 +253,14 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
-  // close sidebar on tab change (mobile)
-  const changeTab = (id) => {
-    setTab(id);
-    setSidebarOpen(false);
-  };
+  // Load analytics when overview tab is opened
+  useEffect(() => {
+    if (tab === "overview" && !analytics) {
+      loadAnalytics();
+    }
+  }, [tab, analytics, loadAnalytics]);
+
+  const changeTab = (id) => { setTab(id); setSidebarOpen(false); };
 
   // ── Report actions ──────────────────────────────────────────────────────────
   const saveReport = async () => {
@@ -173,7 +283,7 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
     try {
       const subs = await apiFetch(`/api/admin/submissions/report/${r.id}`);
       setViewSubs(Array.isArray(subs) ? subs.filter(s => s.status === "approved") : []);
-    } catch { /* silently ignore */ }
+    } catch { }
   };
 
   const changeStatus = async (id, status) => {
@@ -268,7 +378,6 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
     return !q || u.name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q) || u.role?.toLowerCase().includes(q);
   });
 
-  // ── Sidebar tabs ────────────────────────────────────────────────────────────
   const tabs = [
     { id: "overview",    icon: "📊", label: "Overview" },
     { id: "reports",     icon: "📋", label: "Reports",     count: reports.length },
@@ -279,13 +388,11 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
     ] : []),
   ];
 
-  // ── Mobile card for a report ────────────────────────────────────────────────
+  // ── Mobile report card ──────────────────────────────────────────────────────
   const ReportCard = ({ r }) => {
     const isExpanded = expandedReport === r.id;
-    
     return (
       <div style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.07)", borderRadius: 12, overflow: "hidden", marginBottom: 10 }}>
-        {/* Card header — always visible */}
         <div style={{ padding: "14px 16px", cursor: "pointer" }} onClick={() => setExpandedReport(isExpanded ? null : r.id)}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
             <div style={{ minWidth: 0, flex: 1 }}>
@@ -301,27 +408,17 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
             </div>
           </div>
         </div>
-
-        {/* Expanded details */}
         {isExpanded && (
           <div style={{ borderTop: "1px solid rgba(255,255,255,.07)", padding: "14px 16px", background: "rgba(255,255,255,.02)" }}>
-            {r.description && (
-              <div style={{ fontSize: 13, color: "rgba(255,255,255,.6)", lineHeight: 1.6, marginBottom: 14 }}>{r.description}</div>
-            )}
-            {/* Status changer (admin only) */}
+            {r.description && <div style={{ fontSize: 13, color: "rgba(255,255,255,.6)", lineHeight: 1.6, marginBottom: 14 }}>{r.description}</div>}
             {isAdmin && (
               <div style={{ marginBottom: 14 }}>
                 <div style={{ fontSize: 11, color: "rgba(255,255,255,.35)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>Status</div>
-                <select
-                  value={r.status}
-                  onChange={e => changeStatus(r.id, e.target.value)}
-                  style={{ ...INPUT, padding: "8px 10px", fontSize: 13 }}
-                >
+                <select value={r.status} onChange={e => changeStatus(r.id, e.target.value)} style={{ ...INPUT, padding: "8px 10px", fontSize: 13 }}>
                   {VALID_STATUSES.map(s => <option key={s}>{s}</option>)}
                 </select>
               </div>
             )}
-            {/* Action buttons */}
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <button className="db-btn" style={{ fontSize: 12, padding: "7px 14px", flex: 1 }} onClick={() => openView(r)}>👁 View</button>
               <button className="db-btn" style={{ fontSize: 12, padding: "7px 14px", flex: 1 }} onClick={() => setEditReport({ ...r })}>✏️ Edit</button>
@@ -340,7 +437,6 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
     );
   };
 
-  // ── User card (mobile) ──────────────────────────────────────────────────────
   const UserCard = ({ u }) => (
     <div style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.07)", borderRadius: 12, padding: "14px 16px", marginBottom: 10 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
@@ -366,6 +462,332 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
     </div>
   );
 
+  // ── OVERVIEW SECTION ────────────────────────────────────────────────────────
+  const renderOverview = () => {
+    if (!summary) return null;
+
+    const ANALYTICS_TABS = [
+      { id: "trend",  label: "📈 Trend"    },
+      { id: "types",  label: "🏷 Types"   },
+      { id: "geo",    label: "🗺 Geography" },
+      { id: "time",   label: "🕐 Time"    },
+    ];
+
+    const a = analytics;
+
+    return (
+      <div style={{ animation: "fadeUp .4s ease both" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20, flexWrap: "wrap", gap: 10 }}>
+          <div>
+            <h1 style={{ fontFamily: "'DM Serif Display',serif", fontSize: mobile ? 24 : 28, marginBottom: 2 }}>Overview</h1>
+            <p style={{ color: "rgba(255,255,255,.4)", fontSize: 13 }}>
+              Welcome back, {user.name?.split(" ")[0]}.
+              {a && <> <span style={{ color: "rgba(255,255,255,.25)" }}>·</span> {a.total} total incidents tracked</>}
+            </p>
+          </div>
+          <button className="db-btn" style={{ fontSize: 12, padding: "7px 14px" }} onClick={() => { loadAnalytics(); loadAll(); }}>
+            ↻ Refresh
+          </button>
+        </div>
+
+        {/* ── KPI row ── */}
+        <div style={{ display: "grid", gridTemplateColumns: mobile ? "repeat(2,1fr)" : "repeat(5,1fr)", gap: mobile ? 10 : 12, marginBottom: 20 }}>
+          {[
+            { label: "Total Reports",   value: summary.totals.reports,     icon: "📋", color: "#e8c56d", delta: a?.growthPct },
+            { label: "Users",           value: summary.totals.users,        icon: "👥", color: "#3b82f6"  },
+            { label: "Messages",        value: summary.totals.contacts,     icon: "✉️", color: "#a78bfa"  },
+            { label: "Pending Review",  value: summary.totals.pendingSubs,  icon: "📨", color: summary.totals.pendingSubs > 0 ? "#ef4444" : "#6b7280" },
+            { label: "Resolution Rate", value: a ? `${a.resolutionRate}%` : "—", icon: "✅", color: "#10b981" },
+          ].map((c, i) => (
+            <div key={i} style={{ background: "rgba(255,255,255,.03)", border: `1px solid ${c.color}20`, borderRadius: 12, padding: mobile ? "14px 12px" : "18px 16px", position: "relative", overflow: "hidden" }}>
+              <div style={{ position: "absolute", top: 0, right: 0, width: 60, height: 60, background: `radial-gradient(circle at 100% 0%, ${c.color}18, transparent 70%)`, pointerEvents: "none" }} />
+              <div style={{ fontSize: 20, marginBottom: 6 }}>{c.icon}</div>
+              <div style={{ fontSize: mobile ? 22 : 26, fontWeight: 800, color: c.color, fontFamily: "'DM Serif Display',serif", letterSpacing: -1 }}>{c.value}</div>
+              <div style={{ fontSize: 10, color: "rgba(255,255,255,.4)", marginTop: 3, textTransform: "uppercase", letterSpacing: "0.06em", lineHeight: 1.3, marginBottom: c.delta !== undefined ? 6 : 0 }}>{c.label}</div>
+              {c.delta !== undefined && <DeltaPill value={c.delta} />}
+            </div>
+          ))}
+        </div>
+
+        {/* ── Last 30 days vs prior ── */}
+        {a && (
+          <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr 1fr" : "repeat(4,1fr)", gap: mobile ? 10 : 12, marginBottom: 20 }}>
+            {[
+              { label: "Last 30 Days",     value: a.last30,    icon: "📅", color: "#e8c56d" },
+              { label: "Prior 30 Days",    value: a.prior30,   icon: "📆", color: "rgba(255,255,255,.5)" },
+              { label: "Avg Resolution",   value: a.avgResolutionDays != null ? `${a.avgResolutionDays}d` : "—", icon: "⏱", color: "#3b82f6" },
+              { label: "States Reached",   value: a.topStates?.length || "—", icon: "🗺️", color: "#a78bfa" },
+            ].map((c, i) => (
+              <div key={i} style={{ background: "rgba(255,255,255,.02)", border: "1px solid rgba(255,255,255,.07)", borderRadius: 12, padding: "14px 16px", display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: `${c.color}12`, border: `1px solid ${c.color}22`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>{c.icon}</div>
+                <div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: c.color, fontFamily: "'DM Serif Display',serif" }}>{c.value}</div>
+                  <div style={{ fontSize: 10, color: "rgba(255,255,255,.35)", textTransform: "uppercase", letterSpacing: "0.06em" }}>{c.label}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ── Analytics panels ── */}
+        <div style={{ background: "rgba(255,255,255,.02)", border: "1px solid rgba(255,255,255,.07)", borderRadius: 16, overflow: "hidden", marginBottom: 20 }}>
+          {/* Tab switcher */}
+          <div style={{ display: "flex", borderBottom: "1px solid rgba(255,255,255,.07)", padding: "0 4px", gap: 2, overflowX: "auto" }}>
+            {ANALYTICS_TABS.map(t => (
+              <button key={t.id} onClick={() => setAnalyticsView(t.id)}
+                style={{ background: "none", border: "none", borderBottom: analyticsView === t.id ? "2px solid #e8c56d" : "2px solid transparent", color: analyticsView === t.id ? "#e8c56d" : "rgba(255,255,255,.45)", padding: "12px 14px", cursor: "pointer", fontFamily: "'Outfit',sans-serif", fontSize: 12, fontWeight: 600, whiteSpace: "nowrap", transition: "all .2s" }}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          <div style={{ padding: mobile ? 16 : 22 }}>
+            {analyticsLoading && (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 120, gap: 10, color: "rgba(255,255,255,.3)", fontSize: 13 }}>
+                <Spinner /> Loading analytics…
+              </div>
+            )}
+
+            {!analyticsLoading && !a && (
+              <div style={{ textAlign: "center", padding: "32px 0", color: "rgba(255,255,255,.25)", fontSize: 13 }}>
+                Analytics data unavailable — make sure <code style={{ background: "rgba(255,255,255,.07)", borderRadius: 4, padding: "2px 6px", fontSize: 12 }}>/api/stats/analytics</code> is deployed.
+              </div>
+            )}
+
+            {!analyticsLoading && a && (
+              <>
+                {/* TREND */}
+                {analyticsView === "trend" && (
+                  <div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 2 }}>Monthly Volume</div>
+                        <div style={{ fontSize: 12, color: "rgba(255,255,255,.35)" }}>Incident submissions over the past 12 months</div>
+                      </div>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <span style={{ fontSize: 12, color: "rgba(255,255,255,.45)" }}>Peak: <strong style={{ color: "#e8c56d" }}>{Math.max(...a.monthly.map(m => m.count))}</strong></span>
+                        <span style={{ fontSize: 12, color: "rgba(255,255,255,.25)" }}>·</span>
+                        <DeltaPill value={a.growthPct} />
+                      </div>
+                    </div>
+                    <MiniBarChart data={a.monthly} height={mobile ? 90 : 110} showValues color="#e8c56d" />
+
+                    <div style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid rgba(255,255,255,.07)" }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Weekly Velocity</div>
+                      <MiniBarChart data={a.weekly} height={mobile ? 70 : 80} color="#3b82f6" />
+                    </div>
+                  </div>
+                )}
+
+                {/* TYPES */}
+                {analyticsView === "types" && (
+                  <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "1fr 1fr", gap: 24 }}>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 16 }}>Incident Types</div>
+                      {a.byType.map((t, i) => (
+                        <HBar key={i} label={t.type} value={t.count} max={a.byType[0]?.count || 1}
+                          color={["#e8c56d","#3b82f6","#10b981","#a78bfa","#f59e0b","#ef4444"][i % 6]} />
+                      ))}
+                      {a.byType.length === 0 && <p style={{ fontSize: 13, color: "rgba(255,255,255,.3)" }}>No data yet.</p>}
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 16 }}>Status Breakdown</div>
+                      <div style={{ display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap" }}>
+                        <DonutChart
+                          data={Object.entries(summary.byStatus).map(([label, value]) => ({ label, value }))}
+                          size={mobile ? 110 : 130}
+                        />
+                        <div style={{ flex: 1, minWidth: 100 }}>
+                          {Object.entries(summary.byStatus).map(([s, n], i) => (
+                            <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                              <div style={{ width: 8, height: 8, borderRadius: 2, background: STATUS_COLORS[s]?.text || "#888", flexShrink: 0 }} />
+                              <span style={{ fontSize: 12, color: "rgba(255,255,255,.6)", flex: 1 }}>{s}</span>
+                              <span style={{ fontSize: 12, fontWeight: 700, color: STATUS_COLORS[s]?.text || "#888" }}>{n}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid rgba(255,255,255,.07)" }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Resolution Funnel</div>
+                        {[
+                          { label: "Submitted",    value: summary.totals.reports, color: "#e8c56d"  },
+                          { label: "In Progress",  value: summary.byStatus?.["In Progress"] || 0, color: "#3b82f6" },
+                          { label: "Resolved",     value: summary.byStatus?.["Resolved"] || 0,    color: "#10b981" },
+                        ].map((f, i) => (
+                          <HBar key={i} label={f.label} value={f.value} max={summary.totals.reports} color={f.color} />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* GEO */}
+                {analyticsView === "geo" && (
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 16 }}>Top States by Incident Count</div>
+                    {a.topStates.length === 0 && (
+                      <p style={{ fontSize: 13, color: "rgba(255,255,255,.3)" }}>No location data yet. Reports need "City, State" format.</p>
+                    )}
+                    <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "1fr 1fr", gap: mobile ? 10 : 20 }}>
+                      <div>
+                        {a.topStates.map((s, i) => (
+                          <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
+                            <div style={{ width: 22, height: 22, borderRadius: 6, background: "rgba(232,197,109,.1)", border: "1px solid rgba(232,197,109,.2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: "#e8c56d", flexShrink: 0 }}>{i + 1}</div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                                <span style={{ fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.state}</span>
+                                <span style={{ fontSize: 12, fontWeight: 700, color: "#e8c56d", flexShrink: 0, marginLeft: 8 }}>{s.count}</span>
+                              </div>
+                              <div style={{ height: 4, background: "rgba(255,255,255,.06)", borderRadius: 2 }}>
+                                <div style={{ height: "100%", width: `${(s.count / (a.topStates[0]?.count || 1)) * 100}%`, background: `linear-gradient(90deg, #e8c56d, #c9972a)`, borderRadius: 2 }} />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 12, color: "rgba(255,255,255,.4)", marginBottom: 12 }}>Distribution</div>
+                        <MiniBarChart
+                          data={a.topStates.map(s => ({ label: s.state.slice(0, 4), count: s.count }))}
+                          height={100}
+                          color="#e8c56d"
+                          showValues
+                        />
+                        <div style={{ marginTop: 16, background: "rgba(255,255,255,.02)", border: "1px solid rgba(255,255,255,.07)", borderRadius: 10, padding: "12px 14px" }}>
+                          <div style={{ fontSize: 11, color: "rgba(255,255,255,.35)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>Coverage</div>
+                          <div style={{ fontSize: 22, fontWeight: 800, color: "#a78bfa", fontFamily: "'DM Serif Display',serif" }}>{a.topStates.length}</div>
+                          <div style={{ fontSize: 12, color: "rgba(255,255,255,.4)" }}>states with reported incidents</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* TIME */}
+                {analyticsView === "time" && (
+                  <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "1fr 1fr", gap: 24 }}>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Hour of Day</div>
+                      <div style={{ fontSize: 12, color: "rgba(255,255,255,.35)", marginBottom: 16 }}>When incidents are most reported (local time)</div>
+                      <MiniBarChart
+                        data={a.hourly.map(h => ({ label: h.hour % 6 === 0 ? `${h.hour}h` : "", count: h.count }))}
+                        height={90}
+                        color="#a78bfa"
+                        accent={a.hourly.reduce((max, h, i, arr) => h.count > arr[max].count ? i : max, 0)}
+                      />
+                      <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
+                        {(() => {
+                          const peakHour = a.hourly.reduce((max, h, i, arr) => h.count > arr[max].count ? i : max, 0);
+                          const periods = [
+                            { label: "Morning (6–12)", hours: [6,7,8,9,10,11] },
+                            { label: "Afternoon (12–18)", hours: [12,13,14,15,16,17] },
+                            { label: "Evening (18–24)", hours: [18,19,20,21,22,23] },
+                            { label: "Night (0–6)", hours: [0,1,2,3,4,5] },
+                          ];
+                          return periods.map((p, i) => {
+                            const count = p.hours.reduce((s, h) => s + (a.hourly[h]?.count || 0), 0);
+                            return (
+                              <div key={i} style={{ flex: 1, minWidth: 80, background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.08)", borderRadius: 8, padding: "8px 10px", textAlign: "center" }}>
+                                <div style={{ fontSize: 14, fontWeight: 700, color: "#a78bfa" }}>{count}</div>
+                                <div style={{ fontSize: 10, color: "rgba(255,255,255,.35)", lineHeight: 1.3 }}>{p.label}</div>
+                              </div>
+                            );
+                          });
+                        })()}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Day of Week</div>
+                      <div style={{ fontSize: 12, color: "rgba(255,255,255,.35)", marginBottom: 16 }}>Volume by weekday</div>
+                      <MiniBarChart
+                        data={a.dayOfWeek}
+                        height={90}
+                        color="#f59e0b"
+                        showValues
+                        accent={a.dayOfWeek.reduce((max, d, i, arr) => d.count > arr[max].count ? i : max, 0)}
+                      />
+                      <div style={{ marginTop: 16 }}>
+                        <div style={{ fontSize: 12, color: "rgba(255,255,255,.35)", marginBottom: 10 }}>Busiest vs quietest</div>
+                        {(() => {
+                          const sorted = [...a.dayOfWeek].sort((a, b) => b.count - a.count);
+                          return (
+                            <div style={{ display: "flex", gap: 10 }}>
+                              <div style={{ flex: 1, background: "rgba(245,158,11,.06)", border: "1px solid rgba(245,158,11,.2)", borderRadius: 8, padding: "10px 12px" }}>
+                                <div style={{ fontSize: 11, color: "rgba(255,255,255,.35)", marginBottom: 4 }}>BUSIEST</div>
+                                <div style={{ fontSize: 16, fontWeight: 700, color: "#f59e0b" }}>{sorted[0]?.label}</div>
+                                <div style={{ fontSize: 12, color: "rgba(255,255,255,.4)" }}>{sorted[0]?.count} reports</div>
+                              </div>
+                              <div style={{ flex: 1, background: "rgba(107,114,128,.06)", border: "1px solid rgba(107,114,128,.2)", borderRadius: 8, padding: "10px 12px" }}>
+                                <div style={{ fontSize: 11, color: "rgba(255,255,255,.35)", marginBottom: 4 }}>QUIETEST</div>
+                                <div style={{ fontSize: 16, fontWeight: 700, color: "#6b7280" }}>{sorted[sorted.length - 1]?.label}</div>
+                                <div style={{ fontSize: 12, color: "rgba(255,255,255,.4)" }}>{sorted[sorted.length - 1]?.count} reports</div>
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* ── Status bars + type breakdown (always visible, no analytics needed) ── */}
+        <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "1fr 1fr", gap: mobile ? 14 : 20, marginBottom: 20 }}>
+          <div style={{ background: "rgba(255,255,255,.02)", border: "1px solid rgba(255,255,255,.07)", borderRadius: 14, padding: "18px 20px" }}>
+            <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 16, color: "rgba(255,255,255,.7)" }}>Status Breakdown</h3>
+            {Object.entries(summary.byStatus).map(([s, n]) => {
+              const pct = summary.totals.reports > 0 ? Math.round((n / summary.totals.reports) * 100) : 0;
+              const col = STATUS_COLORS[s]?.text || "#888";
+              return (
+                <div key={s} style={{ marginBottom: 12 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                    <span style={{ fontSize: 12, color: col }}>{s}</span>
+                    <span style={{ fontSize: 12, fontWeight: 600 }}>{n} <span style={{ color: "rgba(255,255,255,.35)", fontWeight: 400 }}>({pct}%)</span></span>
+                  </div>
+                  <div style={{ height: 5, background: "rgba(255,255,255,.07)", borderRadius: 3 }}>
+                    <div style={{ height: "100%", width: `${pct}%`, background: col, borderRadius: 3, transition: "width .6s ease" }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ background: "rgba(255,255,255,.02)", border: "1px solid rgba(255,255,255,.07)", borderRadius: 14, padding: "18px 20px" }}>
+            <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 14, color: "rgba(255,255,255,.7)" }}>Incident Types</h3>
+            {Object.entries(summary.byType).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([t, n]) => (
+              <div key={t} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <span style={{ fontSize: 12, color: "rgba(255,255,255,.65)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "75%" }}>{t}</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: "#e8c56d", flexShrink: 0 }}>{n}</span>
+              </div>
+            ))}
+            {Object.keys(summary.byType).length === 0 && <p style={{ fontSize: 13, color: "rgba(255,255,255,.3)" }}>No reports yet.</p>}
+          </div>
+        </div>
+
+        {/* ── 7-day bar ── */}
+        <div style={{ background: "rgba(255,255,255,.02)", border: "1px solid rgba(255,255,255,.07)", borderRadius: 14, padding: "18px 20px" }}>
+          <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 18, color: "rgba(255,255,255,.7)" }}>Reports — Last 7 Days</h3>
+          <div style={{ display: "flex", alignItems: "flex-end", gap: mobile ? 6 : 10, height: 70 }}>
+            {summary.daily.map((d, i) => {
+              const max = Math.max(...summary.daily.map(x => x.count), 1);
+              const h = Math.max((d.count / max) * 60, d.count > 0 ? 8 : 3);
+              return (
+                <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
+                  <span style={{ fontSize: 10, color: "#e8c56d", fontWeight: 700 }}>{d.count || ""}</span>
+                  <div style={{ width: "100%", height: h, background: d.count > 0 ? "linear-gradient(180deg,#e8c56d,#c9972a)" : "rgba(255,255,255,.08)", borderRadius: "3px 3px 0 0", transition: "height .4s ease" }} />
+                  <span style={{ fontSize: 9, color: "rgba(255,255,255,.3)", textAlign: "center" }}>{d.label.split(",")[0]}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div style={{ minHeight: "100vh", background: "#0a0a0f", color: "#f0eee8", fontFamily: "'Outfit',sans-serif", display: "flex", flexDirection: "column" }}>
       <style>{`
@@ -382,7 +804,6 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
         .db-btn:disabled{opacity:.45;cursor:not-allowed;transform:none}
         .row-hover:hover{background:rgba(255,255,255,.04)!important}
         .tab-active{background:rgba(232,197,109,.1)!important;border-color:rgba(232,197,109,.3)!important;color:#e8c56d!important}
-        .bottom-tab-active{color:#e8c56d!important}
         input.db-input,select.db-input,textarea.db-input{width:100%;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:10px 12px;color:#f0eee8;font-family:'Outfit',sans-serif;font-size:14px;outline:none;transition:border-color .2s}
         input.db-input:focus,select.db-input:focus,textarea.db-input:focus{border-color:rgba(232,197,109,.5)}
         select.db-input option{background:#1a1a24}
@@ -396,7 +817,6 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
       {/* ── Top bar ── */}
       <header style={{ height: 56, background: "rgba(10,10,15,.97)", borderBottom: "1px solid rgba(255,255,255,.07)", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px", flexShrink: 0, backdropFilter: "blur(20px)", position: "sticky", top: 0, zIndex: 100 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          {/* Hamburger (mobile/tablet) */}
           {compact && (
             <button onClick={() => setSidebarOpen(o => !o)} style={{ background: "none", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", gap: 4, padding: 4, marginRight: 4 }}>
               {[0,1,2].map(i => (
@@ -430,7 +850,7 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
         </div>
       </header>
 
-      {/* ── Mobile sidebar overlay ── */}
+      {/* ── Mobile sidebar ── */}
       {compact && sidebarOpen && (
         <>
           <div className="mobile-sidebar-overlay" onClick={() => setSidebarOpen(false)} />
@@ -449,8 +869,7 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
               {tabs.map(t => (
                 <button key={t.id} onClick={() => changeTab(t.id)}
                   className={`db-btn${tab === t.id ? " tab-active" : ""}`}
-                  style={{ display: "flex", alignItems: "center", gap: 9, padding: "11px 12px", border: "1px solid transparent", textAlign: "left", justifyContent: "flex-start" }}
-                >
+                  style={{ display: "flex", alignItems: "center", gap: 9, padding: "11px 12px", border: "1px solid transparent", textAlign: "left", justifyContent: "flex-start" }}>
                   <span style={{ fontSize: 16 }}>{t.icon}</span>
                   <span style={{ flex: 1, fontSize: 13 }}>{t.label}</span>
                   {t.count !== undefined && (
@@ -475,8 +894,7 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
               {tabs.map(t => (
                 <button key={t.id} onClick={() => setTab(t.id)}
                   className={`db-btn${tab === t.id ? " tab-active" : ""}`}
-                  style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 12px", border: "1px solid transparent", textAlign: "left", justifyContent: "flex-start" }}
-                >
+                  style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 12px", border: "1px solid transparent", textAlign: "left", justifyContent: "flex-start" }}>
                   <span style={{ fontSize: 15 }}>{t.icon}</span>
                   <span style={{ flex: 1, fontSize: 13 }}>{t.label}</span>
                   {t.count !== undefined && (
@@ -496,77 +914,7 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
             </div>
           ) : (
             <>
-              {/* ── OVERVIEW ── */}
-              {tab === "overview" && summary && (
-                <div style={{ animation: "fadeUp .4s ease both" }}>
-                  <h1 style={{ fontFamily: "'DM Serif Display',serif", fontSize: mobile ? 24 : 28, marginBottom: 4 }}>Overview</h1>
-                  <p style={{ color: "rgba(255,255,255,.4)", fontSize: 13, marginBottom: 24 }}>Welcome back, {user.name?.split(" ")[0]}. Here's a snapshot of the platform.</p>
-
-                  <div style={{ display: "grid", gridTemplateColumns: mobile ? "repeat(2,1fr)" : "repeat(auto-fill,minmax(160px,1fr))", gap: mobile ? 10 : 14, marginBottom: 28 }}>
-                    {[
-                      { label: "Total Reports",      value: summary.totals.reports,     icon: "📋", color: "#e8c56d" },
-                      { label: "Users",               value: summary.totals.users,       icon: "👥", color: "#3b82f6" },
-                      { label: "Messages",            value: summary.totals.contacts,    icon: "✉️", color: "#a78bfa" },
-                      { label: "Feed Items",          value: summary.totals.feed,        icon: "📡", color: "#10b981" },
-                      { label: "Pending Subs",        value: summary.totals.pendingSubs, icon: "📨", color: summary.totals.pendingSubs > 0 ? "#ef4444" : "#6b7280" },
-                    ].map((c, i) => (
-                      <div key={i} style={{ background: "rgba(255,255,255,.03)", border: `1px solid ${c.color}22`, borderRadius: 12, padding: mobile ? "16px 14px" : "20px 18px" }}>
-                        <div style={{ fontSize: 22, marginBottom: 6 }}>{c.icon}</div>
-                        <div style={{ fontSize: mobile ? 24 : 28, fontWeight: 800, color: c.color, fontFamily: "'DM Serif Display',serif", letterSpacing: -1 }}>{c.value}</div>
-                        <div style={{ fontSize: 10, color: "rgba(255,255,255,.4)", marginTop: 3, textTransform: "uppercase", letterSpacing: "0.06em", lineHeight: 1.3 }}>{c.label}</div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "1fr 1fr", gap: mobile ? 14 : 20, marginBottom: 24 }}>
-                    <div style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.07)", borderRadius: 14, padding: "18px 20px" }}>
-                      <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 14, color: "rgba(255,255,255,.7)" }}>Reports by Status</h3>
-                      {Object.entries(summary.byStatus).map(([s, n]) => {
-                        const pct = summary.totals.reports > 0 ? Math.round((n / summary.totals.reports) * 100) : 0;
-                        const col = STATUS_COLORS[s]?.text || "#888";
-                        return (
-                          <div key={s} style={{ marginBottom: 10 }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                              <span style={{ fontSize: 12, color: col }}>{s}</span>
-                              <span style={{ fontSize: 12, fontWeight: 600 }}>{n} <span style={{ color: "rgba(255,255,255,.35)", fontWeight: 400 }}>({pct}%)</span></span>
-                            </div>
-                            <div style={{ height: 4, background: "rgba(255,255,255,.07)", borderRadius: 3 }}>
-                              <div style={{ height: "100%", width: `${pct}%`, background: col, borderRadius: 3, transition: "width .6s ease" }} />
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    <div style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.07)", borderRadius: 14, padding: "18px 20px" }}>
-                      <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 14, color: "rgba(255,255,255,.7)" }}>Reports by Type</h3>
-                      {Object.entries(summary.byType).sort((a,b) => b[1]-a[1]).slice(0,6).map(([t, n]) => (
-                        <div key={t} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                          <span style={{ fontSize: 12, color: "rgba(255,255,255,.65)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "75%" }}>{t}</span>
-                          <span style={{ fontSize: 13, fontWeight: 700, color: "#e8c56d", flexShrink: 0 }}>{n}</span>
-                        </div>
-                      ))}
-                      {Object.keys(summary.byType).length === 0 && <p style={{ fontSize: 13, color: "rgba(255,255,255,.3)" }}>No reports yet.</p>}
-                    </div>
-                  </div>
-
-                  <div style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.07)", borderRadius: 14, padding: "18px 20px" }}>
-                    <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 18, color: "rgba(255,255,255,.7)" }}>Reports — Last 7 Days</h3>
-                    <div style={{ display: "flex", alignItems: "flex-end", gap: mobile ? 6 : 10, height: 70 }}>
-                      {summary.daily.map((d, i) => {
-                        const max = Math.max(...summary.daily.map(x => x.count), 1);
-                        const h = Math.max((d.count / max) * 60, d.count > 0 ? 8 : 3);
-                        return (
-                          <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
-                            <span style={{ fontSize: 10, color: "#e8c56d", fontWeight: 700 }}>{d.count || ""}</span>
-                            <div style={{ width: "100%", height: h, background: d.count > 0 ? "linear-gradient(180deg,#e8c56d,#c9972a)" : "rgba(255,255,255,.08)", borderRadius: "3px 3px 0 0", transition: "height .4s ease" }} />
-                            <span style={{ fontSize: 9, color: "rgba(255,255,255,.3)", textAlign: "center" }}>{d.label.split(",")[0]}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-              )}
+              {tab === "overview" && renderOverview()}
 
               {/* ── REPORTS ── */}
               {tab === "reports" && (
@@ -584,16 +932,12 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
                       </select>
                     </div>
                   </div>
-
                   {filteredReports.length === 0 && (
                     <div style={{ padding: "40px 0", textAlign: "center", color: "rgba(255,255,255,.25)", fontSize: 14 }}>No reports match your filters.</div>
                   )}
-
-                  {/* Mobile: cards */}
                   {mobile ? (
                     filteredReports.map(r => <ReportCard key={r.id} r={r} />)
                   ) : (
-                    /* Desktop/tablet: table */
                     <div style={{ background: "rgba(255,255,255,.02)", border: "1px solid rgba(255,255,255,.07)", borderRadius: 14, overflow: "hidden" }}>
                       <div style={{ display: "grid", gridTemplateColumns: "2fr 1.5fr 1.1fr 1fr auto", gap: 12, padding: "10px 18px", borderBottom: "1px solid rgba(255,255,255,.06)", background: "rgba(255,255,255,.03)" }}>
                         {["Type", "Location", "Date", "Status", "Actions"].map(h => (
@@ -633,7 +977,7 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
                 </div>
               )}
 
-              {/* ── USERS (admin only) ── */}
+              {/* ── USERS ── */}
               {tab === "users" && isAdmin && (
                 <div style={{ animation: "fadeUp .4s ease both" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
@@ -643,9 +987,7 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
                     </div>
                     <input className="db-input" placeholder="Search name, email, role…" value={userSearch} onChange={e => setUserSearch(e.target.value)} style={{ width: mobile ? "100%" : 220, fontSize: 13 }} />
                   </div>
-
                   {filteredUsers.length === 0 && <div style={{ padding: "40px 0", textAlign: "center", color: "rgba(255,255,255,.25)", fontSize: 14 }}>No users found.</div>}
-
                   {mobile ? (
                     filteredUsers.map(u => <UserCard key={u.id} u={u} />)
                   ) : (
@@ -670,8 +1012,8 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
                           </div>
                           <div style={{ fontSize: 12, color: "rgba(255,255,255,.4)" }}>{u.created_at ? new Date(u.created_at).toLocaleDateString() : "—"}</div>
                           <div style={{ display: "flex", gap: 5 }}>
-                            <button className="db-btn" style={{ padding: "5px 9px", fontSize: 12 }} onClick={() => setEditUser({ ...u })} title="Edit">✏️</button>
-                            <button className="db-btn red" style={{ padding: "5px 9px", fontSize: 12 }} onClick={() => setDeleteTarget({ kind: "user", id: u.id, label: u.name })} title="Delete">🗑</button>
+                            <button className="db-btn" style={{ padding: "5px 9px", fontSize: 12 }} onClick={() => setEditUser({ ...u })}>✏️</button>
+                            <button className="db-btn red" style={{ padding: "5px 9px", fontSize: 12 }} onClick={() => setDeleteTarget({ kind: "user", id: u.id, label: u.name })}>🗑</button>
                           </div>
                         </div>
                       ))}
@@ -680,7 +1022,7 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
                 </div>
               )}
 
-              {/* ── MESSAGES (admin only) ── */}
+              {/* ── MESSAGES ── */}
               {tab === "messages" && isAdmin && (
                 <div style={{ animation: "fadeUp .4s ease both" }}>
                   <h1 style={{ fontFamily: "'DM Serif Display',serif", fontSize: mobile ? 22 : 28, marginBottom: 4 }}>Contact Messages</h1>
@@ -727,20 +1069,15 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
                       </p>
                     )}
                   </div>
-
                   {isAdmin && pendingCount > 0 && (
                     <div style={{ background: "rgba(239,68,68,.07)", border: "1px solid rgba(239,68,68,.25)", borderRadius: 12, padding: "12px 16px", marginBottom: 16, display: "flex", alignItems: "center", gap: 10 }}>
                       <span style={{ fontSize: 16 }}>🔔</span>
                       <span style={{ fontSize: 13, color: "#ef4444", fontWeight: 600 }}>{pendingCount} submission{pendingCount !== 1 ? "s" : ""} awaiting review</span>
                     </div>
                   )}
-
                   {submissions.length === 0 && (
-                    <div style={{ padding: "40px 0", textAlign: "center", color: "rgba(255,255,255,.25)", fontSize: 13 }}>
-                      No submissions yet.
-                    </div>
+                    <div style={{ padding: "40px 0", textAlign: "center", color: "rgba(255,255,255,.25)", fontSize: 13 }}>No submissions yet.</div>
                   )}
-
                   <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                     {submissions.map(s => {
                       const isPending  = s.status === "pending";
@@ -762,9 +1099,7 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
                               <span style={{ fontSize: 11, fontWeight: 700, color: statusCol, background: `${statusCol}18`, border: `1px solid ${statusCol}30`, borderRadius: 100, padding: "3px 10px", textTransform: "capitalize" }}>{s.status}</span>
                               {isAdmin && isPending && (
                                 <button className="db-btn gold" style={{ padding: "5px 12px", fontSize: 12 }}
-                                  onClick={() => { setReviewModal(s); setReviewDecision("approved"); setReviewNote(""); }}>
-                                  Review →
-                                </button>
+                                  onClick={() => { setReviewModal(s); setReviewDecision("approved"); setReviewNote(""); }}>Review →</button>
                               )}
                             </div>
                           </div>
@@ -796,7 +1131,7 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
         </main>
       </div>
 
-      {/* ── Mobile bottom tab bar ── */}
+      {/* ── Mobile bottom tabs ── */}
       {mobile && (
         <nav style={{ position: "fixed", bottom: 0, left: 0, right: 0, height: 64, background: "rgba(10,10,15,.97)", borderTop: "1px solid rgba(255,255,255,.08)", backdropFilter: "blur(20px)", display: "flex", alignItems: "center", justifyContent: "space-around", zIndex: 90, paddingBottom: "env(safe-area-inset-bottom)" }}>
           {tabs.map(t => (
@@ -811,34 +1146,16 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
         </nav>
       )}
 
-      {/* ─────────────────── MODALS ─────────────────── */}
-
-      {/* View Report */}
+      {/* ── MODALS ── */}
       {viewReport && (
         <Modal title="Report Details" onClose={() => { setViewReport(null); setViewSubs([]); }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {[
-              ["ID",           viewReport.id],
-              ["Type",         viewReport.type],
-              ["Status",       null, <Badge status={viewReport.status} />],
-              ["Location",     viewReport.location],
-              ["Date",         viewReport.date || "—"],
-              ["Organization", viewReport.org  || "—"],
-              ["Anonymous",    viewReport.anonymous ? "Yes" : "No"],
-              ["Submitted",    viewReport.created_at ? new Date(viewReport.created_at).toLocaleString() : "—"],
-            ].map(([label, val, node]) => (
-              <div key={label}>
-                <div style={LABEL}>{label}</div>
-                <div style={{ fontSize: 13, color: "rgba(255,255,255,.75)" }}>{node || val}</div>
-              </div>
+            {[["ID", viewReport.id],["Type", viewReport.type],["Status", null, <Badge status={viewReport.status} />],["Location", viewReport.location],["Date", viewReport.date || "—"],["Organization", viewReport.org || "—"],["Anonymous", viewReport.anonymous ? "Yes" : "No"],["Submitted", viewReport.created_at ? new Date(viewReport.created_at).toLocaleString() : "—"]].map(([label, val, node]) => (
+              <div key={label}><div style={LABEL}>{label}</div><div style={{ fontSize: 13, color: "rgba(255,255,255,.75)" }}>{node || val}</div></div>
             ))}
-            <div>
-              <div style={LABEL}>Description</div>
-              <div style={{ fontSize: 13, color: "rgba(255,255,255,.75)", lineHeight: 1.6, background: "rgba(255,255,255,.03)", borderRadius: 8, padding: 11 }}>{viewReport.description}</div>
-            </div>
+            <div><div style={LABEL}>Description</div><div style={{ fontSize: 13, color: "rgba(255,255,255,.75)", lineHeight: 1.6, background: "rgba(255,255,255,.03)", borderRadius: 8, padding: 11 }}>{viewReport.description}</div></div>
             {viewReport.links?.length > 0 && (
-              <div>
-                <div style={LABEL}>Evidence Links</div>
+              <div><div style={LABEL}>Evidence Links</div>
                 {(typeof viewReport.links === "string" ? JSON.parse(viewReport.links) : viewReport.links).map((l, i) => (
                   <a key={i} href={l} target="_blank" rel="noreferrer" style={{ display: "block", fontSize: 13, color: "#e8c56d", wordBreak: "break-all", marginBottom: 4 }}>{l}</a>
                 ))}
@@ -860,19 +1177,13 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
         </Modal>
       )}
 
-      {/* Edit Report */}
       {editReport && (
         <Modal title="Edit Report" onClose={() => setEditReport(null)}>
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <div><label style={LABEL}>Type</label><input className="db-input" value={editReport.type} onChange={e => setEditReport(p => ({ ...p, type: e.target.value }))} /></div>
             <div><label style={LABEL}>Location</label><input className="db-input" value={editReport.location} onChange={e => setEditReport(p => ({ ...p, location: e.target.value }))} /></div>
             <div><label style={LABEL}>Organization</label><input className="db-input" value={editReport.org || ""} onChange={e => setEditReport(p => ({ ...p, org: e.target.value }))} /></div>
-            <div>
-              <label style={LABEL}>Status</label>
-              <select className="db-input" value={editReport.status} onChange={e => setEditReport(p => ({ ...p, status: e.target.value }))}>
-                {VALID_STATUSES.map(s => <option key={s}>{s}</option>)}
-              </select>
-            </div>
+            <div><label style={LABEL}>Status</label><select className="db-input" value={editReport.status} onChange={e => setEditReport(p => ({ ...p, status: e.target.value }))}>{VALID_STATUSES.map(s => <option key={s}>{s}</option>)}</select></div>
             <div><label style={LABEL}>Description</label><textarea className="db-input" rows={4} value={editReport.description} onChange={e => setEditReport(p => ({ ...p, description: e.target.value }))} style={{ resize: "vertical" }} /></div>
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 4 }}>
               <button className="db-btn" onClick={() => setEditReport(null)}>Cancel</button>
@@ -882,7 +1193,6 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
         </Modal>
       )}
 
-      {/* Edit User */}
       {editUser && (
         <Modal title="Edit User" onClose={() => setEditUser(null)}>
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -892,12 +1202,7 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
               <div><label style={LABEL}>Title</label><input className="db-input" value={editUser.title || ""} onChange={e => setEditUser(p => ({ ...p, title: e.target.value }))} /></div>
               <div><label style={LABEL}>Department</label><input className="db-input" value={editUser.department || ""} onChange={e => setEditUser(p => ({ ...p, department: e.target.value }))} /></div>
             </div>
-            <div>
-              <label style={LABEL}>Role</label>
-              <select className="db-input" value={editUser.role || "user"} onChange={e => setEditUser(p => ({ ...p, role: e.target.value }))}>
-                {VALID_ROLES.map(r => <option key={r}>{r}</option>)}
-              </select>
-            </div>
+            <div><label style={LABEL}>Role</label><select className="db-input" value={editUser.role || "user"} onChange={e => setEditUser(p => ({ ...p, role: e.target.value }))}>{VALID_ROLES.map(r => <option key={r}>{r}</option>)}</select></div>
             <div><label style={LABEL}>Bio</label><textarea className="db-input" rows={3} value={editUser.bio || ""} onChange={e => setEditUser(p => ({ ...p, bio: e.target.value }))} style={{ resize: "none" }} /></div>
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 4 }}>
               <button className="db-btn" onClick={() => setEditUser(null)}>Cancel</button>
@@ -907,7 +1212,6 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
         </Modal>
       )}
 
-      {/* Delete confirm */}
       {deleteTarget && (
         <Modal title={`Delete ${deleteTarget.kind === "report" ? "Report" : deleteTarget.kind === "user" ? "User" : "Message"}`} onClose={() => setDeleteTarget(null)}>
           <p style={{ fontSize: 14, color: "rgba(255,255,255,.65)", marginBottom: 24, lineHeight: 1.6 }}>
@@ -920,23 +1224,15 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
         </Modal>
       )}
 
-      {/* Submit for Review */}
       {submitModal && (
         <Modal title={`Submit for Review — ${submitModal.type}`} onClose={() => setSubmitModal(null)}>
-          <p style={{ fontSize: 13, color: "rgba(255,255,255,.45)", marginBottom: 18, lineHeight: 1.6 }}>
-            Write your notes in Markdown and optionally add image links. An admin will review and either approve or deny.
-          </p>
+          <p style={{ fontSize: 13, color: "rgba(255,255,255,.45)", marginBottom: 18, lineHeight: 1.6 }}>Write your notes in Markdown and optionally add image links. An admin will review and either approve or deny.</p>
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <div>
-              <label style={LABEL}>Notes (Markdown) *</label>
-              <textarea className="db-input" rows={8} placeholder="# Summary&#10;&#10;What was found or resolved..." value={subForm.markdown} onChange={e => setSubForm(p => ({ ...p, markdown: e.target.value }))} style={{ resize: "vertical", fontFamily: "monospace", fontSize: 12 }} />
-            </div>
+            <div><label style={LABEL}>Notes (Markdown) *</label><textarea className="db-input" rows={8} placeholder="# Summary&#10;&#10;What was found or resolved..." value={subForm.markdown} onChange={e => setSubForm(p => ({ ...p, markdown: e.target.value }))} style={{ resize: "vertical", fontFamily: "monospace", fontSize: 12 }} /></div>
             <div>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                 <label style={LABEL}>Image Links</label>
-                {subForm.imageLinks.length < 10 && (
-                  <button className="db-btn" style={{ fontSize: 11, padding: "3px 9px" }} onClick={() => setSubForm(p => ({ ...p, imageLinks: [...p.imageLinks, ""] }))}>+ Add</button>
-                )}
+                {subForm.imageLinks.length < 10 && <button className="db-btn" style={{ fontSize: 11, padding: "3px 9px" }} onClick={() => setSubForm(p => ({ ...p, imageLinks: [...p.imageLinks, ""] }))}>+ Add</button>}
               </div>
               {subForm.imageLinks.map((link, i) => (
                 <div key={i} style={{ display: "flex", gap: 7, marginBottom: 7 }}>
@@ -953,7 +1249,6 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
         </Modal>
       )}
 
-      {/* Admin Review */}
       {reviewModal && (
         <Modal title="Review Submission" onClose={() => setReviewModal(null)}>
           <div style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.07)", borderRadius: 10, padding: "13px 15px", marginBottom: 16 }}>
@@ -978,7 +1273,7 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
             )}
           </div>
           <div style={{ marginBottom: 16 }}>
-            <label style={LABEL}>Note to team member <span style={{ color: "rgba(255,255,255,.28)", fontWeight: 400 }}>(optional)</span></label>
+            <label style={LABEL}>Note <span style={{ color: "rgba(255,255,255,.28)", fontWeight: 400 }}>(optional)</span></label>
             <textarea className="db-input" rows={3} placeholder={reviewDecision === "approved" ? "Great work — confirmed resolved." : "Please add more evidence first."} value={reviewNote} onChange={e => setReviewNote(e.target.value)} style={{ resize: "none" }} />
           </div>
           <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
@@ -991,7 +1286,6 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
         </Modal>
       )}
 
-      {/* Toast */}
       {toast && (
         <div style={{ position: "fixed", bottom: mobile ? 76 : 24, right: mobile ? 12 : 24, left: mobile ? 12 : "auto", zIndex: 1000, background: toast.type === "error" ? "rgba(239,68,68,.12)" : "rgba(16,185,129,.12)", border: `1px solid ${toast.type === "error" ? "rgba(239,68,68,.3)" : "rgba(16,185,129,.3)"}`, borderRadius: 10, padding: "12px 16px", fontSize: 13, color: toast.type === "error" ? "#ef4444" : "#10b981", fontWeight: 500, animation: "fadeUp .25s ease", textAlign: mobile ? "center" : "left" }}>
           {toast.type === "error" ? "⚠ " : "✓ "}{toast.msg}

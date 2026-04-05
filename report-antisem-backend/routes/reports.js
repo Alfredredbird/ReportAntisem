@@ -15,23 +15,39 @@ const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "qwen2:7b";
 // ── Auto-analyze: fire-and-forget after report creation ───────────────────────
 // Runs in the background so the submission response is never delayed.
 async function autoAnalyze(report) {
-  const prompt = `You are a triage assistant for an incident-reporting platform.
+  const prompt = `You are a strict triage assistant for an incident-reporting platform.
 
-Analyze the following report and classify its criticality as EXACTLY one of:
-  critical  – immediate danger, serious crime, urgent action required
-  important – significant issue warranting prompt attention
-  normal    – routine report, no immediate urgency
-  spam      – test data, gibberish, duplicate, or malicious submission
+Your job is to classify reports into EXACTLY one of:
+- critical  → immediate danger, violence, serious crime, urgent response needed
+- important → significant issue requiring attention soon
+- normal    → valid report but low urgency
+- spam      → invalid, meaningless, test, or malicious input
+
+STRICT RULES:
+- If the description is empty, extremely short (< 10 characters), or meaningless → spam
+- If the description contains only symbols, HTML tags (e.g. <b></b>), or random letters → spam
+- If the description is gibberish or not understandable English → spam
+- If the report looks like a test (e.g. "test", "123", "hello") → spam
+- If content is duplicated or clearly fake → spam
+
+- Only classify as normal/important/critical if the report contains a clear, meaningful real-world issue
+
+EXAMPLES:
+Description: "asdfghjkl" → spam
+Description: "<b></b>" → spam
+Description: "test" → spam
+Description: "There is a fight happening outside the school right now" → critical
+Description: "Broken streetlight on 5th ave" → normal
 
 Report details:
-  Type:        ${report.type || "N/A"}
-  Location:    ${report.location || "N/A"}
-  Organization:${report.org || "N/A"}
-  Date:        ${report.date || "N/A"}
-  Description: ${report.description || "N/A"}
+Type:        ${report.type || "N/A"}
+Location:    ${report.location || "N/A"}
+Organization:${report.org || "N/A"}
+Date:        ${report.date || "N/A"}
+Description: ${report.description || "N/A"}
 
-Respond with ONLY a JSON object in this exact format (no markdown, no explanation):
-{"criticality":"<level>","reason":"<one sentence reason>"}`;
+Respond with ONLY a JSON object:
+{"criticality":"<level>","reason":"<short reason>"}`;
 
   try {
     const ollamaRes = await fetch(`${OLLAMA_BASE}/api/generate`, {

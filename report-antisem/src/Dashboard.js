@@ -1,5 +1,6 @@
 /**
- * Dashboard.jsx — Admin/Team dashboard (mobile-responsive, enhanced analytics)
+ * Dashboard.jsx — Admin/Team dashboard
+ * NEW: Search by Report ID · Filter by Criticality · AI Criticality via Ollama/Qwen
  */
 
 import { useState, useEffect, useCallback } from "react";
@@ -10,8 +11,17 @@ const STATUS_COLORS = {
   "Resolved":     { bg: "#10b981", text: "#10b981" },
   "Dismissed":    { bg: "#6b7280", text: "#6b7280" },
 };
-const VALID_STATUSES = ["Under Review", "In Progress", "Resolved", "Dismissed"];
-const VALID_ROLES    = ["user", "team", "admin"];
+
+const CRITICALITY_META = {
+  critical:  { color: "#ef4444", bg: "rgba(239,68,68,.12)",  border: "rgba(239,68,68,.35)",  icon: "🔴", label: "Critical"  },
+  important: { color: "#f59e0b", bg: "rgba(245,158,11,.12)", border: "rgba(245,158,11,.35)", icon: "🟡", label: "Important" },
+  normal:    { color: "#10b981", bg: "rgba(16,185,129,.12)", border: "rgba(16,185,129,.3)",  icon: "🟢", label: "Normal"    },
+  spam:      { color: "#6b7280", bg: "rgba(107,114,128,.12)",border: "rgba(107,114,128,.3)", icon: "⚫", label: "Spam"      },
+};
+
+const VALID_STATUSES    = ["Under Review", "In Progress", "Resolved", "Dismissed"];
+const VALID_CRITICALITY = ["critical", "important", "normal", "spam"];
+const VALID_ROLES       = ["user", "team", "admin"];
 
 const LABEL = { display: "block", fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.55)", marginBottom: 6, letterSpacing: "0.04em", textTransform: "uppercase" };
 const INPUT = { width: "100%", background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.12)", borderRadius: 8, padding: "10px 12px", color: "#f0eee8", fontFamily: "'Outfit',sans-serif", fontSize: 14, outline: "none" };
@@ -39,6 +49,24 @@ function Badge({ status }) {
   );
 }
 
+function CriticalityBadge({ level, reason, compact = false }) {
+  if (!level) return null;
+  const m = CRITICALITY_META[level] || CRITICALITY_META.normal;
+  return (
+    <span
+      title={reason || m.label}
+      style={{
+        fontSize: 11, fontWeight: 700, color: m.color,
+        background: m.bg, border: `1px solid ${m.border}`,
+        borderRadius: 100, padding: compact ? "2px 7px" : "3px 10px",
+        whiteSpace: "nowrap", cursor: reason ? "help" : "default",
+        display: "inline-flex", alignItems: "center", gap: 4,
+      }}>
+      {m.icon} {!compact && m.label}
+    </span>
+  );
+}
+
 function Modal({ title, onClose, children, wide }) {
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 999, background: "rgba(0,0,0,.75)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
@@ -53,7 +81,7 @@ function Modal({ title, onClose, children, wide }) {
   );
 }
 
-// ── Mini bar chart component ──────────────────────────────────────────────────
+// ── Mini bar chart ────────────────────────────────────────────────────────────
 function MiniBarChart({ data, valueKey = "count", labelKey = "label", color = "#e8c56d", height = 80, showValues = false, accent }) {
   const max = Math.max(...data.map(d => d[valueKey]), 1);
   return (
@@ -68,8 +96,7 @@ function MiniBarChart({ data, valueKey = "count", labelKey = "label", color = "#
               <span style={{ fontSize: 9, color, fontWeight: 700, lineHeight: 1 }}>{d[valueKey]}</span>
             )}
             <div style={{
-              width: "100%",
-              height: barH,
+              width: "100%", height: barH,
               background: isAccent
                 ? `linear-gradient(180deg, #fff, ${color})`
                 : d[valueKey] > 0
@@ -88,7 +115,6 @@ function MiniBarChart({ data, valueKey = "count", labelKey = "label", color = "#
   );
 }
 
-// ── Donut chart (SVG) ─────────────────────────────────────────────────────────
 function DonutChart({ data, size = 120 }) {
   const COLORS = ["#e8c56d", "#3b82f6", "#10b981", "#a78bfa", "#f59e0b", "#ef4444", "#6b7280"];
   const total = data.reduce((s, d) => s + d.value, 0);
@@ -101,12 +127,11 @@ function DonutChart({ data, size = 120 }) {
     const angle = (d.value / total) * 360;
     const startAngle = cumAngle;
     cumAngle += angle;
-    const endAngle = cumAngle;
     const toRad = (a) => (a * Math.PI) / 180;
     const x1 = cx + r * Math.cos(toRad(startAngle));
     const y1 = cy + r * Math.sin(toRad(startAngle));
-    const x2 = cx + r * Math.cos(toRad(endAngle));
-    const y2 = cy + r * Math.sin(toRad(endAngle));
+    const x2 = cx + r * Math.cos(toRad(cumAngle));
+    const y2 = cy + r * Math.sin(toRad(cumAngle));
     const large = angle > 180 ? 1 : 0;
     return { path: `M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2}`, color: COLORS[i % COLORS.length], label: d.label, value: d.value };
   });
@@ -125,7 +150,6 @@ function DonutChart({ data, size = 120 }) {
   );
 }
 
-// ── Stat delta pill ───────────────────────────────────────────────────────────
 function DeltaPill({ value }) {
   if (value === undefined || value === null) return null;
   const up = value >= 0;
@@ -136,7 +160,6 @@ function DeltaPill({ value }) {
   );
 }
 
-// ── Horizontal bar ────────────────────────────────────────────────────────────
 function HBar({ label, value, max, color = "#e8c56d" }) {
   const pct = max > 0 ? (value / max) * 100 : 0;
   return (
@@ -160,16 +183,16 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
   const tablet  = width >= 768 && width < 1024;
   const compact = mobile || tablet;
 
-  const [tab,           setTab]           = useState("reports");
-  const [sidebarOpen,   setSidebarOpen]   = useState(false);
+  const [tab,         setTab]         = useState("reports");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Data
-  const [reports,    setReports]    = useState([]);
-  const [users,      setUsers]      = useState([]);
-  const [contacts,   setContacts]   = useState([]);
-  const [summary,    setSummary]    = useState(null);
-  const [analytics,  setAnalytics]  = useState(null);
-  const [loading,    setLoading]    = useState(true);
+  const [reports,   setReports]   = useState([]);
+  const [users,     setUsers]     = useState([]);
+  const [contacts,  setContacts]  = useState([]);
+  const [summary,   setSummary]   = useState(null);
+  const [analytics, setAnalytics] = useState(null);
+  const [loading,   setLoading]   = useState(true);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
 
   // Editing
@@ -181,10 +204,16 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
   const [saving,       setSaving]       = useState(false);
   const [toast,        setToast]        = useState(null);
 
-  // Filters
-  const [reportFilter, setReportFilter] = useState("all");
-  const [reportSearch, setReportSearch] = useState("");
-  const [userSearch,   setUserSearch]   = useState("");
+  // Filters — NEW: idSearch + criticalityFilter
+  const [reportFilter,      setReportFilter]      = useState("all");
+  const [reportSearch,      setReportSearch]      = useState("");
+  const [idSearch,          setIdSearch]          = useState("");
+  const [criticalityFilter, setCriticalityFilter] = useState("all");
+  const [userSearch,        setUserSearch]        = useState("");
+
+  // AI analysis
+  const [analyzingId,    setAnalyzingId]    = useState(null);
+  const [analyzingAll,   setAnalyzingAll]   = useState(false);
 
   // Submissions
   const [submissions,    setSubmissions]    = useState([]);
@@ -196,7 +225,7 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
   const [reviewNote,     setReviewNote]     = useState("");
 
   const [expandedReport, setExpandedReport] = useState(null);
-  const [analyticsView,  setAnalyticsView]  = useState("trend"); // "trend"|"types"|"geo"|"time"
+  const [analyticsView,  setAnalyticsView]  = useState("trend");
 
   const showToast = (msg, type = "success") => {
     setToast({ msg, type });
@@ -218,11 +247,8 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
     try {
       const data = await apiFetch("/api/stats/analytics");
       setAnalytics(data);
-    } catch (e) {
-      // analytics endpoint optional — fail silently
-    } finally {
-      setAnalyticsLoading(false);
-    }
+    } catch {}
+    finally { setAnalyticsLoading(false); }
   }, [apiFetch]);
 
   const loadAll = useCallback(async () => {
@@ -253,14 +279,45 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
-  // Load analytics when overview tab is opened
   useEffect(() => {
-    if (tab === "overview" && !analytics) {
-      loadAnalytics();
-    }
+    if (tab === "overview" && !analytics) loadAnalytics();
   }, [tab, analytics, loadAnalytics]);
 
   const changeTab = (id) => { setTab(id); setSidebarOpen(false); };
+
+  // ── AI: analyze single report ─────────────────────────────────────────────
+  const analyzeReport = async (reportId) => {
+    setAnalyzingId(reportId);
+    try {
+      const result = await apiFetch(`/api/admin/reports/${reportId}/analyze`, { method: "POST" });
+      showToast(`AI: ${result.criticality.toUpperCase()} — ${result.reason?.slice(0, 80) || ""}`, "success");
+      // Update local state immediately so badge appears without full reload
+      setReports(prev => prev.map(r =>
+        r.id === reportId
+          ? { ...r, criticality: result.criticality, criticality_reason: result.reason }
+          : r
+      ));
+    } catch (e) {
+      showToast("AI analysis failed: " + e.message, "error");
+    } finally {
+      setAnalyzingId(null);
+    }
+  };
+
+  // ── AI: bulk analyze all un-analyzed reports ──────────────────────────────
+  const analyzeAll = async () => {
+    setAnalyzingAll(true);
+    try {
+      const result = await apiFetch("/api/admin/reports/analyze-all", { method: "POST" });
+      showToast(result.message, "success");
+      // Reload after a delay to pick up background results
+      setTimeout(loadAll, 8000);
+    } catch (e) {
+      showToast("Bulk analysis failed: " + e.message, "error");
+    } finally {
+      setAnalyzingAll(false);
+    }
+  };
 
   // ── Report actions ──────────────────────────────────────────────────────────
   const saveReport = async () => {
@@ -283,7 +340,7 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
     try {
       const subs = await apiFetch(`/api/admin/submissions/report/${r.id}`);
       setViewSubs(Array.isArray(subs) ? subs.filter(s => s.status === "approved") : []);
-    } catch { }
+    } catch {}
   };
 
   const changeStatus = async (id, status) => {
@@ -322,14 +379,14 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
         deleteTarget.kind === "user"    ? `/api/admin/users/${deleteTarget.id}`    :
         `/api/admin/contact/${deleteTarget.id}`;
       await apiFetch(path, { method: "DELETE" });
-      showToast(`${deleteTarget.kind === "report" ? "Report" : deleteTarget.kind === "user" ? "User" : "Message"} deleted`);
+      showToast(`Deleted`);
       setDeleteTarget(null);
       loadAll();
     } catch (e) { showToast(e.message, "error"); }
     finally { setSaving(false); }
   };
 
-  // ── Submission actions ──────────────────────────────────────────────────────
+  // ── Submissions ─────────────────────────────────────────────────────────────
   const submitForReview = async () => {
     if (!submitModal || !subForm.markdown.trim()) return;
     setSubSaving(true);
@@ -355,7 +412,7 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
         method: "PATCH",
         body: JSON.stringify({ decision: reviewDecision, adminNote: reviewNote }),
       });
-      showToast(reviewDecision === "approved" ? "✓ Approved — report marked Resolved" : "Submission denied");
+      showToast(reviewDecision === "approved" ? "✓ Approved" : "Submission denied");
       setReviewModal(null);
       setReviewNote("");
       setReviewDecision("approved");
@@ -366,17 +423,25 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
 
   const pendingCount = submissions.filter(s => s.status === "pending").length;
 
+  // ── Filtering — now includes ID and criticality ───────────────────────────
   const filteredReports = reports.filter(r => {
-    const matchStatus = reportFilter === "all" || r.status === reportFilter;
+    const matchStatus      = reportFilter === "all"      || r.status === reportFilter;
+    const matchCriticality = criticalityFilter === "all" || r.criticality === criticalityFilter;
+    const matchId          = !idSearch.trim()            || String(r.id).toLowerCase().includes(idSearch.trim().toLowerCase());
     const q = reportSearch.toLowerCase();
-    const matchSearch = !q || r.type?.toLowerCase().includes(q) || r.location?.toLowerCase().includes(q) || r.description?.toLowerCase().includes(q);
-    return matchStatus && matchSearch;
+    const matchSearch = !q
+      || r.type?.toLowerCase().includes(q)
+      || r.location?.toLowerCase().includes(q)
+      || r.description?.toLowerCase().includes(q);
+    return matchStatus && matchCriticality && matchId && matchSearch;
   });
 
   const filteredUsers = users.filter(u => {
     const q = userSearch.toLowerCase();
     return !q || u.name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q) || u.role?.toLowerCase().includes(q);
   });
+
+  const unanalyzedCount = reports.filter(r => !r.criticality).length;
 
   const tabs = [
     { id: "overview",    icon: "📊", label: "Overview" },
@@ -391,14 +456,19 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
   // ── Mobile report card ──────────────────────────────────────────────────────
   const ReportCard = ({ r }) => {
     const isExpanded = expandedReport === r.id;
+    const isAnalyzing = analyzingId === r.id;
     return (
       <div style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.07)", borderRadius: 12, overflow: "hidden", marginBottom: 10 }}>
         <div style={{ padding: "14px 16px", cursor: "pointer" }} onClick={() => setExpandedReport(isExpanded ? null : r.id)}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
             <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.type}</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
+                <div style={{ fontWeight: 600, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.type}</div>
+                {r.criticality && <CriticalityBadge level={r.criticality} reason={r.criticality_reason} compact />}
+              </div>
               <div style={{ fontSize: 12, color: "rgba(255,255,255,.45)", display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {r.location && <span>📍 {r.location}</span>}
+                <span>🆔 {r.id}</span>
                 <span>🕐 {r.created_at ? new Date(r.created_at).toLocaleDateString() : "—"}</span>
               </div>
             </div>
@@ -411,6 +481,30 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
         {isExpanded && (
           <div style={{ borderTop: "1px solid rgba(255,255,255,.07)", padding: "14px 16px", background: "rgba(255,255,255,.02)" }}>
             {r.description && <div style={{ fontSize: 13, color: "rgba(255,255,255,.6)", lineHeight: 1.6, marginBottom: 14 }}>{r.description}</div>}
+
+            {/* AI criticality section */}
+            <div style={{ background: "rgba(0,0,0,.2)", border: "1px solid rgba(255,255,255,.07)", borderRadius: 8, padding: "10px 12px", marginBottom: 14 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                <div>
+                  <div style={{ fontSize: 10, color: "rgba(255,255,255,.35)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>AI Criticality</div>
+                  {r.criticality
+                    ? <CriticalityBadge level={r.criticality} reason={r.criticality_reason} />
+                    : <span style={{ fontSize: 12, color: "rgba(255,255,255,.3)" }}>Not analyzed</span>
+                  }
+                </div>
+                <button
+                  className="db-btn"
+                  style={{ fontSize: 11, padding: "5px 10px", background: "rgba(139,92,246,.08)", border: "1px solid rgba(139,92,246,.3)", color: "#a78bfa", flexShrink: 0 }}
+                  onClick={() => analyzeReport(r.id)}
+                  disabled={isAnalyzing}>
+                  {isAnalyzing ? <><Spinner size={10} /> Analyzing…</> : "🤖 Analyze"}
+                </button>
+              </div>
+              {r.criticality_reason && (
+                <div style={{ fontSize: 11, color: "rgba(255,255,255,.4)", marginTop: 6, lineHeight: 1.5 }}>{r.criticality_reason}</div>
+              )}
+            </div>
+
             {isAdmin && (
               <div style={{ marginBottom: 14 }}>
                 <div style={{ fontSize: 11, color: "rgba(255,255,255,.35)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>Status</div>
@@ -462,17 +556,15 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
     </div>
   );
 
-  // ── OVERVIEW SECTION ────────────────────────────────────────────────────────
+  // ── OVERVIEW ────────────────────────────────────────────────────────────────
   const renderOverview = () => {
     if (!summary) return null;
-
     const ANALYTICS_TABS = [
-      { id: "trend",  label: "📈 Trend"    },
-      { id: "types",  label: "🏷 Types"   },
+      { id: "trend",  label: "📈 Trend"     },
+      { id: "types",  label: "🏷 Types"     },
       { id: "geo",    label: "🗺 Geography" },
-      { id: "time",   label: "🕐 Time"    },
+      { id: "time",   label: "🕐 Time"      },
     ];
-
     const a = analytics;
 
     return (
@@ -485,18 +577,15 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
               {a && <> <span style={{ color: "rgba(255,255,255,.25)" }}>·</span> {a.total} total incidents tracked</>}
             </p>
           </div>
-          <button className="db-btn" style={{ fontSize: 12, padding: "7px 14px" }} onClick={() => { loadAnalytics(); loadAll(); }}>
-            ↻ Refresh
-          </button>
+          <button className="db-btn" style={{ fontSize: 12, padding: "7px 14px" }} onClick={() => { loadAnalytics(); loadAll(); }}>↻ Refresh</button>
         </div>
 
-        {/* ── KPI row ── */}
         <div style={{ display: "grid", gridTemplateColumns: mobile ? "repeat(2,1fr)" : "repeat(5,1fr)", gap: mobile ? 10 : 12, marginBottom: 20 }}>
           {[
-            { label: "Total Reports",   value: summary.totals.reports,     icon: "📋", color: "#e8c56d", delta: a?.growthPct },
-            { label: "Users",           value: summary.totals.users,        icon: "👥", color: "#3b82f6"  },
-            { label: "Messages",        value: summary.totals.contacts,     icon: "✉️", color: "#a78bfa"  },
-            { label: "Pending Review",  value: summary.totals.pendingSubs,  icon: "📨", color: summary.totals.pendingSubs > 0 ? "#ef4444" : "#6b7280" },
+            { label: "Total Reports",   value: summary.totals.reports,    icon: "📋", color: "#e8c56d", delta: a?.growthPct },
+            { label: "Users",           value: summary.totals.users,       icon: "👥", color: "#3b82f6" },
+            { label: "Messages",        value: summary.totals.contacts,    icon: "✉️", color: "#a78bfa" },
+            { label: "Pending Review",  value: summary.totals.pendingSubs, icon: "📨", color: summary.totals.pendingSubs > 0 ? "#ef4444" : "#6b7280" },
             { label: "Resolution Rate", value: a ? `${a.resolutionRate}%` : "—", icon: "✅", color: "#10b981" },
           ].map((c, i) => (
             <div key={i} style={{ background: "rgba(255,255,255,.03)", border: `1px solid ${c.color}20`, borderRadius: 12, padding: mobile ? "14px 12px" : "18px 16px", position: "relative", overflow: "hidden" }}>
@@ -509,14 +598,13 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
           ))}
         </div>
 
-        {/* ── Last 30 days vs prior ── */}
         {a && (
           <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr 1fr" : "repeat(4,1fr)", gap: mobile ? 10 : 12, marginBottom: 20 }}>
             {[
-              { label: "Last 30 Days",     value: a.last30,    icon: "📅", color: "#e8c56d" },
-              { label: "Prior 30 Days",    value: a.prior30,   icon: "📆", color: "rgba(255,255,255,.5)" },
-              { label: "Avg Resolution",   value: a.avgResolutionDays != null ? `${a.avgResolutionDays}d` : "—", icon: "⏱", color: "#3b82f6" },
-              { label: "States Reached",   value: a.topStates?.length || "—", icon: "🗺️", color: "#a78bfa" },
+              { label: "Last 30 Days",   value: a.last30,   icon: "📅", color: "#e8c56d" },
+              { label: "Prior 30 Days",  value: a.prior30,  icon: "📆", color: "rgba(255,255,255,.5)" },
+              { label: "Avg Resolution", value: a.avgResolutionDays != null ? `${a.avgResolutionDays}d` : "—", icon: "⏱", color: "#3b82f6" },
+              { label: "States Reached", value: a.topStates?.length || "—", icon: "🗺️", color: "#a78bfa" },
             ].map((c, i) => (
               <div key={i} style={{ background: "rgba(255,255,255,.02)", border: "1px solid rgba(255,255,255,.07)", borderRadius: 12, padding: "14px 16px", display: "flex", alignItems: "center", gap: 12 }}>
                 <div style={{ width: 36, height: 36, borderRadius: 10, background: `${c.color}12`, border: `1px solid ${c.color}22`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>{c.icon}</div>
@@ -529,9 +617,7 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
           </div>
         )}
 
-        {/* ── Analytics panels ── */}
         <div style={{ background: "rgba(255,255,255,.02)", border: "1px solid rgba(255,255,255,.07)", borderRadius: 16, overflow: "hidden", marginBottom: 20 }}>
-          {/* Tab switcher */}
           <div style={{ display: "flex", borderBottom: "1px solid rgba(255,255,255,.07)", padding: "0 4px", gap: 2, overflowX: "auto" }}>
             {ANALYTICS_TABS.map(t => (
               <button key={t.id} onClick={() => setAnalyticsView(t.id)}
@@ -540,46 +626,38 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
               </button>
             ))}
           </div>
-
           <div style={{ padding: mobile ? 16 : 22 }}>
             {analyticsLoading && (
               <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 120, gap: 10, color: "rgba(255,255,255,.3)", fontSize: 13 }}>
                 <Spinner /> Loading analytics…
               </div>
             )}
-
             {!analyticsLoading && !a && (
               <div style={{ textAlign: "center", padding: "32px 0", color: "rgba(255,255,255,.25)", fontSize: 13 }}>
-                Analytics data unavailable — make sure <code style={{ background: "rgba(255,255,255,.07)", borderRadius: 4, padding: "2px 6px", fontSize: 12 }}>/api/stats/analytics</code> is deployed.
+                Analytics data unavailable.
               </div>
             )}
-
             {!analyticsLoading && a && (
               <>
-                {/* TREND */}
                 {analyticsView === "trend" && (
                   <div>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
                       <div>
                         <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 2 }}>Monthly Volume</div>
-                        <div style={{ fontSize: 12, color: "rgba(255,255,255,.35)" }}>Incident submissions over the past 12 months</div>
+                        <div style={{ fontSize: 12, color: "rgba(255,255,255,.35)" }}>Last 12 months</div>
                       </div>
                       <div style={{ display: "flex", gap: 8 }}>
                         <span style={{ fontSize: 12, color: "rgba(255,255,255,.45)" }}>Peak: <strong style={{ color: "#e8c56d" }}>{Math.max(...a.monthly.map(m => m.count))}</strong></span>
-                        <span style={{ fontSize: 12, color: "rgba(255,255,255,.25)" }}>·</span>
                         <DeltaPill value={a.growthPct} />
                       </div>
                     </div>
                     <MiniBarChart data={a.monthly} height={mobile ? 90 : 110} showValues color="#e8c56d" />
-
                     <div style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid rgba(255,255,255,.07)" }}>
                       <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Weekly Velocity</div>
                       <MiniBarChart data={a.weekly} height={mobile ? 70 : 80} color="#3b82f6" />
                     </div>
                   </div>
                 )}
-
-                {/* TYPES */}
                 {analyticsView === "types" && (
                   <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "1fr 1fr", gap: 24 }}>
                     <div>
@@ -588,15 +666,11 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
                         <HBar key={i} label={t.type} value={t.count} max={a.byType[0]?.count || 1}
                           color={["#e8c56d","#3b82f6","#10b981","#a78bfa","#f59e0b","#ef4444"][i % 6]} />
                       ))}
-                      {a.byType.length === 0 && <p style={{ fontSize: 13, color: "rgba(255,255,255,.3)" }}>No data yet.</p>}
                     </div>
                     <div>
                       <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 16 }}>Status Breakdown</div>
                       <div style={{ display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap" }}>
-                        <DonutChart
-                          data={Object.entries(summary.byStatus).map(([label, value]) => ({ label, value }))}
-                          size={mobile ? 110 : 130}
-                        />
+                        <DonutChart data={Object.entries(summary.byStatus).map(([label, value]) => ({ label, value }))} size={mobile ? 110 : 130} />
                         <div style={{ flex: 1, minWidth: 100 }}>
                           {Object.entries(summary.byStatus).map(([s, n], i) => (
                             <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
@@ -607,126 +681,44 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
                           ))}
                         </div>
                       </div>
-
-                      <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid rgba(255,255,255,.07)" }}>
-                        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Resolution Funnel</div>
-                        {[
-                          { label: "Submitted",    value: summary.totals.reports, color: "#e8c56d"  },
-                          { label: "In Progress",  value: summary.byStatus?.["In Progress"] || 0, color: "#3b82f6" },
-                          { label: "Resolved",     value: summary.byStatus?.["Resolved"] || 0,    color: "#10b981" },
-                        ].map((f, i) => (
-                          <HBar key={i} label={f.label} value={f.value} max={summary.totals.reports} color={f.color} />
-                        ))}
-                      </div>
                     </div>
                   </div>
                 )}
-
-                {/* GEO */}
                 {analyticsView === "geo" && (
                   <div>
-                    <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 16 }}>Top States by Incident Count</div>
-                    {a.topStates.length === 0 && (
-                      <p style={{ fontSize: 13, color: "rgba(255,255,255,.3)" }}>No location data yet. Reports need "City, State" format.</p>
-                    )}
-                    <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "1fr 1fr", gap: mobile ? 10 : 20 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 16 }}>Top States</div>
+                    <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "1fr 1fr", gap: 20 }}>
                       <div>
                         {a.topStates.map((s, i) => (
                           <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
-                            <div style={{ width: 22, height: 22, borderRadius: 6, background: "rgba(232,197,109,.1)", border: "1px solid rgba(232,197,109,.2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: "#e8c56d", flexShrink: 0 }}>{i + 1}</div>
-                            <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ width: 22, height: 22, borderRadius: 6, background: "rgba(232,197,109,.1)", border: "1px solid rgba(232,197,109,.2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: "#e8c56d", flexShrink: 0 }}>{i+1}</div>
+                            <div style={{ flex: 1 }}>
                               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
-                                <span style={{ fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.state}</span>
-                                <span style={{ fontSize: 12, fontWeight: 700, color: "#e8c56d", flexShrink: 0, marginLeft: 8 }}>{s.count}</span>
+                                <span style={{ fontSize: 13, fontWeight: 600 }}>{s.state}</span>
+                                <span style={{ fontSize: 12, fontWeight: 700, color: "#e8c56d" }}>{s.count}</span>
                               </div>
                               <div style={{ height: 4, background: "rgba(255,255,255,.06)", borderRadius: 2 }}>
-                                <div style={{ height: "100%", width: `${(s.count / (a.topStates[0]?.count || 1)) * 100}%`, background: `linear-gradient(90deg, #e8c56d, #c9972a)`, borderRadius: 2 }} />
+                                <div style={{ height: "100%", width: `${(s.count/(a.topStates[0]?.count||1))*100}%`, background: "linear-gradient(90deg,#e8c56d,#c9972a)", borderRadius: 2 }} />
                               </div>
                             </div>
                           </div>
                         ))}
                       </div>
-                      <div>
-                        <div style={{ fontSize: 12, color: "rgba(255,255,255,.4)", marginBottom: 12 }}>Distribution</div>
-                        <MiniBarChart
-                          data={a.topStates.map(s => ({ label: s.state.slice(0, 4), count: s.count }))}
-                          height={100}
-                          color="#e8c56d"
-                          showValues
-                        />
-                        <div style={{ marginTop: 16, background: "rgba(255,255,255,.02)", border: "1px solid rgba(255,255,255,.07)", borderRadius: 10, padding: "12px 14px" }}>
-                          <div style={{ fontSize: 11, color: "rgba(255,255,255,.35)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>Coverage</div>
-                          <div style={{ fontSize: 22, fontWeight: 800, color: "#a78bfa", fontFamily: "'DM Serif Display',serif" }}>{a.topStates.length}</div>
-                          <div style={{ fontSize: 12, color: "rgba(255,255,255,.4)" }}>states with reported incidents</div>
-                        </div>
-                      </div>
+                      <MiniBarChart data={a.topStates.map(s => ({ label: s.state.slice(0,4), count: s.count }))} height={100} color="#e8c56d" showValues />
                     </div>
                   </div>
                 )}
-
-                {/* TIME */}
                 {analyticsView === "time" && (
                   <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "1fr 1fr", gap: 24 }}>
                     <div>
-                      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Hour of Day</div>
-                      <div style={{ fontSize: 12, color: "rgba(255,255,255,.35)", marginBottom: 16 }}>When incidents are most reported (local time)</div>
-                      <MiniBarChart
-                        data={a.hourly.map(h => ({ label: h.hour % 6 === 0 ? `${h.hour}h` : "", count: h.count }))}
-                        height={90}
-                        color="#a78bfa"
-                        accent={a.hourly.reduce((max, h, i, arr) => h.count > arr[max].count ? i : max, 0)}
-                      />
-                      <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
-                        {(() => {
-                          const peakHour = a.hourly.reduce((max, h, i, arr) => h.count > arr[max].count ? i : max, 0);
-                          const periods = [
-                            { label: "Morning (6–12)", hours: [6,7,8,9,10,11] },
-                            { label: "Afternoon (12–18)", hours: [12,13,14,15,16,17] },
-                            { label: "Evening (18–24)", hours: [18,19,20,21,22,23] },
-                            { label: "Night (0–6)", hours: [0,1,2,3,4,5] },
-                          ];
-                          return periods.map((p, i) => {
-                            const count = p.hours.reduce((s, h) => s + (a.hourly[h]?.count || 0), 0);
-                            return (
-                              <div key={i} style={{ flex: 1, minWidth: 80, background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.08)", borderRadius: 8, padding: "8px 10px", textAlign: "center" }}>
-                                <div style={{ fontSize: 14, fontWeight: 700, color: "#a78bfa" }}>{count}</div>
-                                <div style={{ fontSize: 10, color: "rgba(255,255,255,.35)", lineHeight: 1.3 }}>{p.label}</div>
-                              </div>
-                            );
-                          });
-                        })()}
-                      </div>
+                      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 16 }}>Hour of Day</div>
+                      <MiniBarChart data={a.hourly.map(h => ({ label: h.hour % 6 === 0 ? `${h.hour}h` : "", count: h.count }))} height={90} color="#a78bfa"
+                        accent={a.hourly.reduce((max, h, i, arr) => h.count > arr[max].count ? i : max, 0)} />
                     </div>
                     <div>
-                      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Day of Week</div>
-                      <div style={{ fontSize: 12, color: "rgba(255,255,255,.35)", marginBottom: 16 }}>Volume by weekday</div>
-                      <MiniBarChart
-                        data={a.dayOfWeek}
-                        height={90}
-                        color="#f59e0b"
-                        showValues
-                        accent={a.dayOfWeek.reduce((max, d, i, arr) => d.count > arr[max].count ? i : max, 0)}
-                      />
-                      <div style={{ marginTop: 16 }}>
-                        <div style={{ fontSize: 12, color: "rgba(255,255,255,.35)", marginBottom: 10 }}>Busiest vs quietest</div>
-                        {(() => {
-                          const sorted = [...a.dayOfWeek].sort((a, b) => b.count - a.count);
-                          return (
-                            <div style={{ display: "flex", gap: 10 }}>
-                              <div style={{ flex: 1, background: "rgba(245,158,11,.06)", border: "1px solid rgba(245,158,11,.2)", borderRadius: 8, padding: "10px 12px" }}>
-                                <div style={{ fontSize: 11, color: "rgba(255,255,255,.35)", marginBottom: 4 }}>BUSIEST</div>
-                                <div style={{ fontSize: 16, fontWeight: 700, color: "#f59e0b" }}>{sorted[0]?.label}</div>
-                                <div style={{ fontSize: 12, color: "rgba(255,255,255,.4)" }}>{sorted[0]?.count} reports</div>
-                              </div>
-                              <div style={{ flex: 1, background: "rgba(107,114,128,.06)", border: "1px solid rgba(107,114,128,.2)", borderRadius: 8, padding: "10px 12px" }}>
-                                <div style={{ fontSize: 11, color: "rgba(255,255,255,.35)", marginBottom: 4 }}>QUIETEST</div>
-                                <div style={{ fontSize: 16, fontWeight: 700, color: "#6b7280" }}>{sorted[sorted.length - 1]?.label}</div>
-                                <div style={{ fontSize: 12, color: "rgba(255,255,255,.4)" }}>{sorted[sorted.length - 1]?.count} reports</div>
-                              </div>
-                            </div>
-                          );
-                        })()}
-                      </div>
+                      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 16 }}>Day of Week</div>
+                      <MiniBarChart data={a.dayOfWeek} height={90} color="#f59e0b" showValues
+                        accent={a.dayOfWeek.reduce((max, d, i, arr) => d.count > arr[max].count ? i : max, 0)} />
                     </div>
                   </div>
                 )}
@@ -735,7 +727,6 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
           </div>
         </div>
 
-        {/* ── Status bars + type breakdown (always visible, no analytics needed) ── */}
         <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "1fr 1fr", gap: mobile ? 14 : 20, marginBottom: 20 }}>
           <div style={{ background: "rgba(255,255,255,.02)", border: "1px solid rgba(255,255,255,.07)", borderRadius: 14, padding: "18px 20px" }}>
             <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 16, color: "rgba(255,255,255,.7)" }}>Status Breakdown</h3>
@@ -763,11 +754,9 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
                 <span style={{ fontSize: 13, fontWeight: 700, color: "#e8c56d", flexShrink: 0 }}>{n}</span>
               </div>
             ))}
-            {Object.keys(summary.byType).length === 0 && <p style={{ fontSize: 13, color: "rgba(255,255,255,.3)" }}>No reports yet.</p>}
           </div>
         </div>
 
-        {/* ── 7-day bar ── */}
         <div style={{ background: "rgba(255,255,255,.02)", border: "1px solid rgba(255,255,255,.07)", borderRadius: 14, padding: "18px 20px" }}>
           <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 18, color: "rgba(255,255,255,.7)" }}>Reports — Last 7 Days</h3>
           <div style={{ display: "flex", alignItems: "flex-end", gap: mobile ? 6 : 10, height: 70 }}>
@@ -788,12 +777,14 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
     );
   };
 
+  // ── MAIN RENDER ─────────────────────────────────────────────────────────────
   return (
     <div style={{ minHeight: "100vh", background: "#0a0a0f", color: "#f0eee8", fontFamily: "'Outfit',sans-serif", display: "flex", flexDirection: "column" }}>
       <style>{`
         @keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
         @keyframes spin{to{transform:rotate(360deg)}}
         @keyframes slideIn{from{opacity:0;transform:translateX(-100%)}to{opacity:1;transform:translateX(0)}}
+        @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
         .db-btn{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);color:#f0eee8;border-radius:8px;padding:7px 14px;font-family:'Outfit',sans-serif;font-size:13px;cursor:pointer;transition:all .2s}
         .db-btn:hover{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.2)}
         .db-btn:active{transform:scale(.97)}
@@ -812,6 +803,7 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
         ::-webkit-scrollbar-thumb{background:#e8c56d22;border-radius:2px}
         .mobile-sidebar-overlay{position:fixed;inset:0;z-index:150;background:rgba(0,0,0,.6);backdrop-filter:blur(4px)}
         .mobile-sidebar{position:fixed;left:0;top:0;bottom:0;width:240px;z-index:151;background:#111118;border-right:1px solid rgba(255,255,255,.1);padding:20px 12px;overflow-y:auto;animation:slideIn .25s ease}
+        .analyzing-pulse{animation:pulse 1.2s ease-in-out infinite}
       `}</style>
 
       {/* ── Top bar ── */}
@@ -826,9 +818,7 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
               ))}
             </button>
           )}
-          {!compact && (
-            <button onClick={onBack} className="db-btn" style={{ padding: "5px 10px", fontSize: 12 }}>← Site</button>
-          )}
+          {!compact && <button onClick={onBack} className="db-btn" style={{ padding: "5px 10px", fontSize: 12 }}>← Site</button>}
           <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
             <div style={{ width: 26, height: 26, background: "linear-gradient(135deg,#e8c56d,#c9972a)", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12 }}>✡</div>
             <span style={{ fontFamily: "'DM Serif Display',serif", fontSize: 15 }}>ReportASA</span>
@@ -864,7 +854,6 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
                 <div style={{ fontSize: 11, color: "#e8c56d" }}>{user.role}</div>
               </div>
             </div>
-            <div style={{ fontSize: 10, color: "rgba(255,255,255,.3)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 10, paddingLeft: 8 }}>Navigation</div>
             <nav style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               {tabs.map(t => (
                 <button key={t.id} onClick={() => changeTab(t.id)}
@@ -906,7 +895,7 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
           </aside>
         )}
 
-        {/* ── Main content ── */}
+        {/* ── Main ── */}
         <main style={{ flex: 1, overflowY: "auto", padding: mobile ? "16px" : "24px", paddingBottom: mobile ? "80px" : "24px" }}>
           {loading ? (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 300, gap: 12, color: "rgba(255,255,255,.4)" }}>
@@ -919,59 +908,148 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
               {/* ── REPORTS ── */}
               {tab === "reports" && (
                 <div style={{ animation: "fadeUp .4s ease both" }}>
+                  {/* Header row */}
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
                     <div>
                       <h1 style={{ fontFamily: "'DM Serif Display',serif", fontSize: mobile ? 22 : 28, marginBottom: 2 }}>Reports</h1>
                       <p style={{ color: "rgba(255,255,255,.4)", fontSize: 12 }}>{filteredReports.length} of {reports.length}</p>
                     </div>
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", width: mobile ? "100%" : "auto" }}>
-                      <input className="db-input" placeholder="Search…" value={reportSearch} onChange={e => setReportSearch(e.target.value)} style={{ flex: mobile ? 1 : "none", width: mobile ? "auto" : 200, fontSize: 13 }} />
-                      <select className="db-input" value={reportFilter} onChange={e => setReportFilter(e.target.value)} style={{ flex: mobile ? 1 : "none", width: mobile ? "auto" : 145, fontSize: 13 }}>
-                        <option value="all">All Statuses</option>
-                        {VALID_STATUSES.map(s => <option key={s}>{s}</option>)}
-                      </select>
-                    </div>
+                    {/* Bulk AI analyze button — admin only */}
+                    {isAdmin && unanalyzedCount > 0 && (
+                      <button
+                        className="db-btn"
+                        style={{ fontSize: 12, padding: "7px 14px", background: "rgba(139,92,246,.1)", border: "1px solid rgba(139,92,246,.3)", color: "#a78bfa" }}
+                        onClick={analyzeAll}
+                        disabled={analyzingAll}>
+                        {analyzingAll
+                          ? <><Spinner size={11} /> Queuing…</>
+                          : `🤖 Analyze All (${unanalyzedCount} unscored)`}
+                      </button>
+                    )}
                   </div>
+
+                  {/* ── Filter bar — 2 rows on mobile ── */}
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
+                    {/* Text search */}
+                    <input
+                      className="db-input"
+                      placeholder="Search type, location, description…"
+                      value={reportSearch}
+                      onChange={e => setReportSearch(e.target.value)}
+                      style={{ flex: "1 1 180px", minWidth: 140, fontSize: 13 }}
+                    />
+                    {/* ID search */}
+                    <input
+                      className="db-input"
+                      placeholder="Report ID…"
+                      value={idSearch}
+                      onChange={e => setIdSearch(e.target.value)}
+                      style={{ flex: "1 1 120px", minWidth: 100, fontSize: 13 }}
+                    />
+                    {/* Status filter */}
+                    <select
+                      className="db-input"
+                      value={reportFilter}
+                      onChange={e => setReportFilter(e.target.value)}
+                      style={{ flex: "1 1 130px", minWidth: 120, fontSize: 13 }}>
+                      <option value="all">All Statuses</option>
+                      {VALID_STATUSES.map(s => <option key={s}>{s}</option>)}
+                    </select>
+                    {/* Criticality filter */}
+                    <select
+                      className="db-input"
+                      value={criticalityFilter}
+                      onChange={e => setCriticalityFilter(e.target.value)}
+                      style={{ flex: "1 1 140px", minWidth: 120, fontSize: 13 }}>
+                      <option value="all">All Criticalities</option>
+                      {VALID_CRITICALITY.map(c => (
+                        <option key={c} value={c}>
+                          {CRITICALITY_META[c].icon} {CRITICALITY_META[c].label}
+                        </option>
+                      ))}
+                      <option value="none">⬜ Not Analyzed</option>
+                    </select>
+                    {/* Clear filters button — show only when filters active */}
+                    {(reportSearch || idSearch || reportFilter !== "all" || criticalityFilter !== "all") && (
+                      <button
+                        className="db-btn"
+                        style={{ fontSize: 12, padding: "7px 12px", flexShrink: 0 }}
+                        onClick={() => { setReportSearch(""); setIdSearch(""); setReportFilter("all"); setCriticalityFilter("all"); }}>
+                        ✕ Clear
+                      </button>
+                    )}
+                  </div>
+
                   {filteredReports.length === 0 && (
                     <div style={{ padding: "40px 0", textAlign: "center", color: "rgba(255,255,255,.25)", fontSize: 14 }}>No reports match your filters.</div>
                   )}
+
                   {mobile ? (
                     filteredReports.map(r => <ReportCard key={r.id} r={r} />)
                   ) : (
                     <div style={{ background: "rgba(255,255,255,.02)", border: "1px solid rgba(255,255,255,.07)", borderRadius: 14, overflow: "hidden" }}>
-                      <div style={{ display: "grid", gridTemplateColumns: "2fr 1.5fr 1.1fr 1fr auto", gap: 12, padding: "10px 18px", borderBottom: "1px solid rgba(255,255,255,.06)", background: "rgba(255,255,255,.03)" }}>
-                        {["Type", "Location", "Date", "Status", "Actions"].map(h => (
+                      {/* Table header */}
+                      <div style={{ display: "grid", gridTemplateColumns: "0.7fr 2fr 1.4fr 1fr 0.9fr 1fr auto", gap: 10, padding: "10px 18px", borderBottom: "1px solid rgba(255,255,255,.06)", background: "rgba(255,255,255,.03)" }}>
+                        {["ID", "Type", "Location", "Date", "Status", "Criticality", "Actions"].map(h => (
                           <span key={h} style={{ fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,.35)", textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</span>
                         ))}
                       </div>
-                      {filteredReports.map((r, i) => (
-                        <div key={r.id} className="row-hover" style={{ display: "grid", gridTemplateColumns: "2fr 1.5fr 1.1fr 1fr auto", gap: 12, padding: "12px 18px", borderBottom: i < filteredReports.length - 1 ? "1px solid rgba(255,255,255,.05)" : "none", alignItems: "center", transition: "background .15s" }}>
-                          <div style={{ minWidth: 0 }}>
-                            <div style={{ fontWeight: 600, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.type}</div>
-                            <div style={{ fontSize: 11, color: "rgba(255,255,255,.3)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.description?.slice(0, 55)}…</div>
+                      {/* Table rows */}
+                      {filteredReports.map((r, i) => {
+                        const isAnalyzing = analyzingId === r.id;
+                        return (
+                          <div key={r.id} className="row-hover" style={{ display: "grid", gridTemplateColumns: "0.7fr 2fr 1.4fr 1fr 0.9fr 1fr auto", gap: 10, padding: "12px 18px", borderBottom: i < filteredReports.length - 1 ? "1px solid rgba(255,255,255,.05)" : "none", alignItems: "center", transition: "background .15s" }}>
+                            {/* ID */}
+                            <div style={{ fontSize: 11, color: "rgba(255,255,255,.35)", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.id}>
+                              {String(r.id).slice(0, 8)}{String(r.id).length > 8 ? "…" : ""}
+                            </div>
+                            {/* Type + description */}
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontWeight: 600, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.type}</div>
+                              <div style={{ fontSize: 11, color: "rgba(255,255,255,.3)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.description?.slice(0, 55)}…</div>
+                            </div>
+                            {/* Location */}
+                            <div style={{ fontSize: 13, color: "rgba(255,255,255,.55)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.location || "—"}</div>
+                            {/* Date */}
+                            <div style={{ fontSize: 12, color: "rgba(255,255,255,.4)" }}>{r.created_at ? new Date(r.created_at).toLocaleDateString() : "—"}</div>
+                            {/* Status */}
+                            <div>
+                              {isAdmin ? (
+                                <select value={r.status} onChange={e => changeStatus(r.id, e.target.value)} style={{ ...INPUT, padding: "5px 8px", fontSize: 12, width: "auto", cursor: "pointer" }}>
+                                  {VALID_STATUSES.map(s => <option key={s}>{s}</option>)}
+                                </select>
+                              ) : (<Badge status={r.status} />)}
+                            </div>
+                            {/* Criticality */}
+                            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                              {r.criticality
+                                ? <CriticalityBadge level={r.criticality} reason={r.criticality_reason} />
+                                : <span style={{ fontSize: 11, color: "rgba(255,255,255,.2)" }}>—</span>
+                              }
+                            </div>
+                            {/* Actions */}
+                            <div style={{ display: "flex", gap: 4 }}>
+                              <button className="db-btn" style={{ padding: "5px 8px", fontSize: 12 }} onClick={() => openView(r)} title="View">👁</button>
+                              <button className="db-btn" style={{ padding: "5px 8px", fontSize: 12 }} onClick={() => setEditReport({ ...r })} title="Edit">✏️</button>
+                              <button
+                                className="db-btn"
+                                style={{ padding: "5px 8px", fontSize: 12, background: "rgba(139,92,246,.08)", border: "1px solid rgba(139,92,246,.25)", color: "#a78bfa" }}
+                                onClick={() => analyzeReport(r.id)}
+                                disabled={isAnalyzing}
+                                title="Analyze with AI">
+                                {isAnalyzing ? <span className="analyzing-pulse">🤖</span> : "🤖"}
+                              </button>
+                              {!isAdmin && (
+                                <button className="db-btn" style={{ padding: "5px 8px", fontSize: 12, background: "rgba(232,197,109,.08)", border: "1px solid rgba(232,197,109,.25)", color: "#e8c56d" }}
+                                  onClick={() => { setSubmitModal(r); setSubForm({ markdown: "", imageLinks: [""] }); }} title="Submit for Review">📨</button>
+                              )}
+                              {isAdmin && (
+                                <button className="db-btn red" style={{ padding: "5px 8px", fontSize: 12 }} onClick={() => setDeleteTarget({ kind: "report", id: r.id, label: r.type })} title="Delete">🗑</button>
+                              )}
+                            </div>
                           </div>
-                          <div style={{ fontSize: 13, color: "rgba(255,255,255,.55)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.location || "—"}</div>
-                          <div style={{ fontSize: 12, color: "rgba(255,255,255,.4)" }}>{r.created_at ? new Date(r.created_at).toLocaleDateString() : "—"}</div>
-                          <div>
-                            {isAdmin ? (
-                              <select value={r.status} onChange={e => changeStatus(r.id, e.target.value)} style={{ ...INPUT, padding: "5px 8px", fontSize: 12, width: "auto", cursor: "pointer" }}>
-                                {VALID_STATUSES.map(s => <option key={s}>{s}</option>)}
-                              </select>
-                            ) : (<Badge status={r.status} />)}
-                          </div>
-                          <div style={{ display: "flex", gap: 5 }}>
-                            <button className="db-btn" style={{ padding: "5px 9px", fontSize: 12 }} onClick={() => openView(r)} title="View">👁</button>
-                            <button className="db-btn" style={{ padding: "5px 9px", fontSize: 12 }} onClick={() => setEditReport({ ...r })} title="Edit">✏️</button>
-                            {!isAdmin && (
-                              <button className="db-btn" style={{ padding: "5px 9px", fontSize: 12, background: "rgba(232,197,109,.08)", border: "1px solid rgba(232,197,109,.25)", color: "#e8c56d" }}
-                                onClick={() => { setSubmitModal(r); setSubForm({ markdown: "", imageLinks: [""] }); }} title="Submit for Review">📨</button>
-                            )}
-                            {isAdmin && (
-                              <button className="db-btn red" style={{ padding: "5px 9px", fontSize: 12 }} onClick={() => setDeleteTarget({ kind: "report", id: r.id, label: r.type })} title="Delete">🗑</button>
-                            )}
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -1039,12 +1117,10 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
                           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                             {c.subject && <span style={{ fontSize: 11, background: "rgba(232,197,109,.1)", border: "1px solid rgba(232,197,109,.2)", borderRadius: 100, padding: "2px 10px", color: "#e8c56d" }}>{c.subject}</span>}
                             {!mobile && <span style={{ fontSize: 11, color: "rgba(255,255,255,.3)" }}>{c.created_at ? new Date(c.created_at).toLocaleString() : ""}</span>}
-                            <button className="db-btn red" style={{ padding: "4px 9px", fontSize: 12 }}
-                              onClick={() => setDeleteTarget({ kind: "message", id: c.id, label: `message from ${c.name || c.email}` })}>🗑</button>
+                            <button className="db-btn red" style={{ padding: "4px 9px", fontSize: 12 }} onClick={() => setDeleteTarget({ kind: "message", id: c.id, label: `message from ${c.name || c.email}` })}>🗑</button>
                           </div>
                         </div>
                         <p style={{ fontSize: 13, color: "rgba(255,255,255,.6)", lineHeight: 1.65 }}>{c.message}</p>
-                        {mobile && c.created_at && <div style={{ fontSize: 11, color: "rgba(255,255,255,.25)", marginTop: 8 }}>{new Date(c.created_at).toLocaleString()}</div>}
                       </div>
                     ))}
                   </div>
@@ -1072,7 +1148,7 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
                   {isAdmin && pendingCount > 0 && (
                     <div style={{ background: "rgba(239,68,68,.07)", border: "1px solid rgba(239,68,68,.25)", borderRadius: 12, padding: "12px 16px", marginBottom: 16, display: "flex", alignItems: "center", gap: 10 }}>
                       <span style={{ fontSize: 16 }}>🔔</span>
-                      <span style={{ fontSize: 13, color: "#ef4444", fontWeight: 600 }}>{pendingCount} submission{pendingCount !== 1 ? "s" : ""} awaiting review</span>
+                      <span style={{ fontSize: 13, color: "#ef4444", fontWeight: 600 }}>{pendingCount} awaiting review</span>
                     </div>
                   )}
                   {submissions.length === 0 && (
@@ -1116,7 +1192,7 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
                           )}
                           {s.admin_note && (
                             <div style={{ marginTop: 10, background: isApproved ? "rgba(16,185,129,.06)" : "rgba(239,68,68,.06)", border: `1px solid ${isApproved ? "rgba(16,185,129,.2)" : "rgba(239,68,68,.2)"}`, borderRadius: 8, padding: "10px 12px" }}>
-                              <div style={{ fontSize: 10, color: isApproved ? "#10b981" : "#ef4444", fontWeight: 600, marginBottom: 4 }}>Admin Note ({isApproved ? "Approved" : "Denied"})</div>
+                              <div style={{ fontSize: 10, color: isApproved ? "#10b981" : "#ef4444", fontWeight: 600, marginBottom: 4 }}>Admin Note</div>
                               <div style={{ fontSize: 13, color: "rgba(255,255,255,.6)" }}>{s.admin_note}</div>
                             </div>
                           )}
@@ -1150,7 +1226,23 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
       {viewReport && (
         <Modal title="Report Details" onClose={() => { setViewReport(null); setViewSubs([]); }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {[["ID", viewReport.id],["Type", viewReport.type],["Status", null, <Badge status={viewReport.status} />],["Location", viewReport.location],["Date", viewReport.date || "—"],["Organization", viewReport.org || "—"],["Anonymous", viewReport.anonymous ? "Yes" : "No"],["Submitted", viewReport.created_at ? new Date(viewReport.created_at).toLocaleString() : "—"]].map(([label, val, node]) => (
+            {[
+              ["ID",           viewReport.id],
+              ["Type",         viewReport.type],
+              ["Status",       null, <Badge status={viewReport.status} />],
+              ["Criticality",  null, viewReport.criticality
+                ? <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <CriticalityBadge level={viewReport.criticality} />
+                    {viewReport.criticality_reason && <span style={{ fontSize: 12, color: "rgba(255,255,255,.45)" }}>{viewReport.criticality_reason}</span>}
+                  </div>
+                : <span style={{ fontSize: 13, color: "rgba(255,255,255,.3)" }}>Not analyzed</span>
+              ],
+              ["Location",     viewReport.location],
+              ["Date",         viewReport.date || "—"],
+              ["Organization", viewReport.org || "—"],
+              ["Anonymous",    viewReport.anonymous ? "Yes" : "No"],
+              ["Submitted",    viewReport.created_at ? new Date(viewReport.created_at).toLocaleString() : "—"],
+            ].map(([label, val, node]) => (
               <div key={label}><div style={LABEL}>{label}</div><div style={{ fontSize: 13, color: "rgba(255,255,255,.75)" }}>{node || val}</div></div>
             ))}
             <div><div style={LABEL}>Description</div><div style={{ fontSize: 13, color: "rgba(255,255,255,.75)", lineHeight: 1.6, background: "rgba(255,255,255,.03)", borderRadius: 8, padding: 11 }}>{viewReport.description}</div></div>
@@ -1213,7 +1305,7 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
       )}
 
       {deleteTarget && (
-        <Modal title={`Delete ${deleteTarget.kind === "report" ? "Report" : deleteTarget.kind === "user" ? "User" : "Message"}`} onClose={() => setDeleteTarget(null)}>
+        <Modal title="Confirm Delete" onClose={() => setDeleteTarget(null)}>
           <p style={{ fontSize: 14, color: "rgba(255,255,255,.65)", marginBottom: 24, lineHeight: 1.6 }}>
             Permanently delete <strong style={{ color: "#f0eee8" }}>{deleteTarget.label}</strong>? This cannot be undone.
           </p>
@@ -1226,7 +1318,7 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
 
       {submitModal && (
         <Modal title={`Submit for Review — ${submitModal.type}`} onClose={() => setSubmitModal(null)}>
-          <p style={{ fontSize: 13, color: "rgba(255,255,255,.45)", marginBottom: 18, lineHeight: 1.6 }}>Write your notes in Markdown and optionally add image links. An admin will review and either approve or deny.</p>
+          <p style={{ fontSize: 13, color: "rgba(255,255,255,.45)", marginBottom: 18, lineHeight: 1.6 }}>Write your notes in Markdown and optionally add image links. An admin will review.</p>
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <div><label style={LABEL}>Notes (Markdown) *</label><textarea className="db-input" rows={8} placeholder="# Summary&#10;&#10;What was found or resolved..." value={subForm.markdown} onChange={e => setSubForm(p => ({ ...p, markdown: e.target.value }))} style={{ resize: "vertical", fontFamily: "monospace", fontSize: 12 }} /></div>
             <div>
@@ -1266,15 +1358,10 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
                 </button>
               ))}
             </div>
-            {reviewDecision === "approved" && (
-              <div style={{ marginTop: 8, fontSize: 12, color: "rgba(16,185,129,.8)", background: "rgba(16,185,129,.06)", border: "1px solid rgba(16,185,129,.2)", borderRadius: 7, padding: "8px 11px" }}>
-                ✓ Approving will mark this report as <strong>Resolved</strong>.
-              </div>
-            )}
           </div>
           <div style={{ marginBottom: 16 }}>
             <label style={LABEL}>Note <span style={{ color: "rgba(255,255,255,.28)", fontWeight: 400 }}>(optional)</span></label>
-            <textarea className="db-input" rows={3} placeholder={reviewDecision === "approved" ? "Great work — confirmed resolved." : "Please add more evidence first."} value={reviewNote} onChange={e => setReviewNote(e.target.value)} style={{ resize: "none" }} />
+            <textarea className="db-input" rows={3} value={reviewNote} onChange={e => setReviewNote(e.target.value)} style={{ resize: "none" }} />
           </div>
           <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
             <button className="db-btn" onClick={() => setReviewModal(null)}>Cancel</button>
@@ -1287,7 +1374,7 @@ export default function Dashboard({ user, API_BASE, onBack, onLogout }) {
       )}
 
       {toast && (
-        <div style={{ position: "fixed", bottom: mobile ? 76 : 24, right: mobile ? 12 : 24, left: mobile ? 12 : "auto", zIndex: 1000, background: toast.type === "error" ? "rgba(239,68,68,.12)" : "rgba(16,185,129,.12)", border: `1px solid ${toast.type === "error" ? "rgba(239,68,68,.3)" : "rgba(16,185,129,.3)"}`, borderRadius: 10, padding: "12px 16px", fontSize: 13, color: toast.type === "error" ? "#ef4444" : "#10b981", fontWeight: 500, animation: "fadeUp .25s ease", textAlign: mobile ? "center" : "left" }}>
+        <div style={{ position: "fixed", bottom: mobile ? 76 : 24, right: mobile ? 12 : 24, left: mobile ? 12 : "auto", zIndex: 1000, background: toast.type === "error" ? "rgba(239,68,68,.12)" : "rgba(16,185,129,.12)", border: `1px solid ${toast.type === "error" ? "rgba(239,68,68,.3)" : "rgba(16,185,129,.3)"}`, borderRadius: 10, padding: "12px 16px", fontSize: 13, color: toast.type === "error" ? "#ef4444" : "#10b981", fontWeight: 500, animation: "fadeUp .25s ease", textAlign: mobile ? "center" : "left", maxWidth: mobile ? "auto" : 400 }}>
           {toast.type === "error" ? "⚠ " : "✓ "}{toast.msg}
         </div>
       )}

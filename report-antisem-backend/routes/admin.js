@@ -1,20 +1,9 @@
 /**
  * /api/admin  — protected routes for dashboard (admin + team)
  *
- * Middleware: requireAuth (any logged-in user)
- *             requireAdmin (role === "admin" only)
- *
- * GET    /api/admin/reports              – all reports with full detail
- * PATCH  /api/admin/reports/:id          – edit any report field
- * PATCH  /api/admin/reports/:id/status   – update status
- * DELETE /api/admin/reports/:id          – delete a report
- *
- * GET    /api/admin/users                – list all users        [admin only]
- * PATCH  /api/admin/users/:id            – edit user fields      [admin only]
- * DELETE /api/admin/users/:id            – delete a user         [admin only]
- *
- * GET    /api/admin/contact              – all contact messages  [admin only]
- * GET    /api/admin/stats                – summary dashboard stats
+ * NEW:
+ *   POST /api/admin/reports/:id/analyze  — send report to local Ollama (Qwen)
+ *                                          and save criticality score
  */
 
 const express = require("express");
@@ -25,6 +14,10 @@ const db      = require("../db");
 const JWT_SECRET  = process.env.JWT_SECRET || "reportasa-dev-secret-change-in-production";
 const COOKIE_NAME = "reportasa_token";
 const ALLOWED_ROLES = ["admin", "team"];
+
+// Ollama config — override via env vars
+const OLLAMA_BASE  = process.env.OLLAMA_BASE  || "http://localhost:11434";
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "qwen2:7b";
 
 // ── Auth middleware ────────────────────────────────────────────────────────────
 function requireAuth(req, res, next) {
@@ -48,7 +41,6 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-// Apply requireAuth to ALL admin routes
 router.use(requireAuth);
 
 // ── Dashboard summary stats ───────────────────────────────────────────────────
@@ -118,7 +110,6 @@ router.patch("/reports/:id", async (req, res) => {
     for (const k of allowed) {
       if (req.body[k] !== undefined) updates[k] = req.body[k];
     }
-    // Build dynamic SET clause
     const cols = Object.keys(updates);
     if (cols.length === 0) return res.status(400).json({ error: "No valid fields to update" });
     const sets = cols.map((c, i) => `${c} = $${i + 1}`).join(", ");
@@ -162,13 +153,148 @@ router.delete("/reports/:id", requireAdmin, async (req, res) => {
   }
 });
 
-// ── Report Submissions ────────────────────────────────────────────────────────
+// ── AI Criticality Analysis (Ollama / Qwen) ───────────────────────────────────
+//
+// POST /api/admin/reports/:id/analyze
+//
+// Sends the report to your local Ollama instance and stores the result.
+// Criticality levels: critical | important | normal | spam
+//
+// Requires the `criticality` column on the reports table:
+//   ALTER TABLE reports ADD COLUMN IF NOT EXISTS criticality TEXT;
+//   ALTER TABLE reports ADD COLUMN IF NOT EXISTS criticality_reason TEXT;
+//   ALTER TABLE reports ADD COLUMN IF NOT EXISTS analyzed_at TIMESTAMPTZ;
+//
+router.post("/reports/:id/analyze", async (req, res) => {
+  try {
+    const report = await db.getReportById(req.params.id);
+    if (!report) return res.status(404).json({ error: "Report not found" });
 
-// GET /api/admin/submissions — all submissions (admin sees all, team sees own)
+    // Build the prompt
+    const prompt = `You are a triage assistant for an incident-reporting platform.
+
+Analyze the following report and classify its criticality as EXACTLY one of:
+  critical  – immediate danger, serious crime, urgent action required
+  important – significant issue warranting prompt attention
+  normal    – routine report, no immediate urgency
+  spam      – test data, gibberish, duplicate, or malicious submission
+
+Report details:
+  Type:        ${report.type || "N/A"}
+  Location:    ${report.location || "N/A"}
+  Organization:${report.org || "N/A"}
+  Date:        ${report.date || "N/A"}
+  Description: ${report.description || "N/A"}
+
+Respond with ONLY a JSON object in this exact format (no markdown, no explanation):
+{"criticality":"<level>","reason":"<one sentence reason>"}`;
+
+    // Call Ollama
+    const ollamaRes = await fetch(`${OLLAMA_BASE}/api/generate`, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model:  OLLAMA_MODEL,
+        prompt,
+        stream: false,
+        options: { temperature: 0.1, num_predict: 120 },
+      }),
+      // 30-second timeout
+      signal: AbortSignal.timeout(30000),
+    });
+
+    if (!ollamaRes.ok) {
+      const errText = await ollamaRes.text();
+      console.error("[OLLAMA ERROR]", ollamaRes.status, errText);
+      return res.status(502).json({ error: `Ollama returned ${ollamaRes.status}: ${errText.slice(0, 200)}` });
+    }
+
+    const ollamaData = await ollamaRes.json();
+    const rawText = (ollamaData.response || "").trim();
+
+    // Parse the JSON response — be tolerant of minor formatting issues
+    let criticality = "normal";
+    let reason = "";
+    try {
+      // Strip any accidental markdown fences
+      const clean = rawText.replace(/```json|```/g, "").trim();
+      // Extract first {...} block
+      const match = clean.match(/\{[\s\S]*?\}/);
+      if (match) {
+        const parsed = JSON.parse(match[0]);
+        const VALID_LEVELS = ["critical", "important", "normal", "spam"];
+        criticality = VALID_LEVELS.includes(parsed.criticality) ? parsed.criticality : "normal";
+        reason = typeof parsed.reason === "string" ? parsed.reason.slice(0, 500) : "";
+      }
+    } catch (parseErr) {
+      console.warn("[OLLAMA PARSE WARN] Could not parse response as JSON:", rawText.slice(0, 300));
+      // Fallback: grep for a keyword in the raw text
+      const lower = rawText.toLowerCase();
+      if (lower.includes("critical"))  criticality = "critical";
+      else if (lower.includes("important")) criticality = "important";
+      else if (lower.includes("spam"))      criticality = "spam";
+      reason = "Auto-classified from AI response";
+    }
+
+    // Persist to DB
+    await db.query(
+      `UPDATE reports
+       SET criticality = $1, criticality_reason = $2, analyzed_at = NOW(), updated_at = NOW()
+       WHERE id = $3`,
+      [criticality, reason, report.id]
+    );
+
+    console.log(`[AI ANALYZE] Report ${report.id} → ${criticality}`);
+    return res.json({ success: true, criticality, reason, reportId: report.id });
+
+  } catch (err) {
+    if (err.name === "TimeoutError") {
+      return res.status(504).json({ error: "Ollama request timed out. Is it running? Try: ollama serve" });
+    }
+    console.error("[ANALYZE ERROR]", err);
+    return res.status(500).json({ error: "Failed to analyze report: " + err.message });
+  }
+});
+
+// Bulk analyze all un-analyzed reports
+router.post("/reports/analyze-all", requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await db.query(
+      "SELECT id FROM reports WHERE criticality IS NULL ORDER BY created_at DESC LIMIT 50"
+    );
+    if (rows.length === 0) return res.json({ success: true, analyzed: 0, message: "All reports already analyzed" });
+
+    // Fire and forget — respond immediately, process in background
+    res.json({ success: true, queued: rows.length, message: `Analyzing ${rows.length} reports in background…` });
+
+    // Background processing with a small delay between requests to avoid hammering Ollama
+    (async () => {
+      let done = 0;
+      for (const { id } of rows) {
+        try {
+          await fetch(`http://localhost:${process.env.PORT || 3001}/api/admin/reports/${id}/analyze`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Cookie: req.headers.cookie || "" },
+          });
+          done++;
+          await new Promise(r => setTimeout(r, 500)); // 500ms gap
+        } catch (e) {
+          console.error(`[ANALYZE-ALL] Failed for report ${id}:`, e.message);
+        }
+      }
+      console.log(`[ANALYZE-ALL] Done: ${done}/${rows.length}`);
+    })();
+
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Failed to queue analysis" });
+  }
+});
+
+// ── Report Submissions ────────────────────────────────────────────────────────
 router.get("/submissions", async (req, res) => {
   try {
     const all = await db.getAllSubmissions();
-    // team members only see their own submissions
     if (req.user.role === "team") {
       return res.json(all.filter(s => s.submitted_by === req.user.id));
     }
@@ -179,7 +305,6 @@ router.get("/submissions", async (req, res) => {
   }
 });
 
-// GET /api/admin/submissions/pending — pending queue (admin only)
 router.get("/submissions/pending", requireAdmin, async (_req, res) => {
   try {
     return res.json(await db.getAllPendingSubmissions());
@@ -189,11 +314,9 @@ router.get("/submissions/pending", requireAdmin, async (_req, res) => {
   }
 });
 
-// GET /api/admin/submissions/report/:reportId — submissions for a single report
 router.get("/submissions/report/:reportId", async (req, res) => {
   try {
     const subs = await db.getSubmissionsByReport(req.params.reportId);
-    // team members only see their own
     if (req.user.role === "team") {
       return res.json(subs.filter(s => s.submitted_by === req.user.id));
     }
@@ -204,14 +327,11 @@ router.get("/submissions/report/:reportId", async (req, res) => {
   }
 });
 
-// POST /api/admin/submissions — team member submits notes for review
-// Body: { reportId, markdown, imageLinks[] }
 router.post("/submissions", async (req, res) => {
   const { reportId, markdown, imageLinks } = req.body;
   if (!reportId)  return res.status(400).json({ error: "reportId is required" });
   if (!markdown?.trim()) return res.status(400).json({ error: "markdown content is required" });
 
-  // Validate image links (must be valid URLs or empty)
   const links = Array.isArray(imageLinks) ? imageLinks.filter(Boolean) : [];
   for (const l of links) {
     try { new URL(l); } catch {
@@ -220,7 +340,6 @@ router.post("/submissions", async (req, res) => {
   }
 
   try {
-    // Fetch submitter's name from DB
     const submitter = await db.getUserById(req.user.id);
     const sub = await db.createSubmission({
       reportId,
@@ -237,10 +356,6 @@ router.post("/submissions", async (req, res) => {
   }
 });
 
-// PATCH /api/admin/submissions/:id/review — admin approves or denies
-// Body: { decision: "approved"|"denied", adminNote? }
-// If approved → marks the report as "Resolved"
-// If denied   → leaves report status unchanged, records note
 router.patch("/submissions/:id/review", requireAdmin, async (req, res) => {
   const { decision, adminNote } = req.body;
   if (!["approved", "denied"].includes(decision)) {
@@ -255,7 +370,6 @@ router.patch("/submissions/:id/review", requireAdmin, async (req, res) => {
     });
     if (!updated) return res.status(404).json({ error: "Submission not found" });
 
-    // If approved, mark the parent report as Resolved
     if (decision === "approved") {
       await db.updateReportStatus(updated.report_id, "Resolved");
       console.log(`[APPROVED] Submission ${updated.id} → report ${updated.report_id} marked Resolved`);

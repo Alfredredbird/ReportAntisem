@@ -1,5 +1,6 @@
 /**
  * /api/reports  — PostgreSQL version
+ * NEW: Auto-analyze criticality via Ollama/Qwen on every new report submission
  */
 const express = require("express");
 const router  = express.Router();
@@ -7,14 +8,97 @@ const db      = require("../db");
 
 const VALID_STATUSES = ["Under Review", "In Progress", "Resolved", "Dismissed"];
 
-// Simple in-memory store for duplicate detection within a short window.
-// Keyed by a fingerprint string; value is the timestamp of last submission.
-// This is a lightweight guard — the rate limiter in server.js is the primary defence.
+// ── Ollama config (mirrors admin.js — override via env) ───────────────────────
+const OLLAMA_BASE  = process.env.OLLAMA_BASE  || "http://localhost:11434";
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "qwen2:7b";
+
+// ── Auto-analyze: fire-and-forget after report creation ───────────────────────
+// Runs in the background so the submission response is never delayed.
+async function autoAnalyze(report) {
+  const prompt = `You are a triage assistant for an incident-reporting platform.
+
+Analyze the following report and classify its criticality as EXACTLY one of:
+  critical  – immediate danger, serious crime, urgent action required
+  important – significant issue warranting prompt attention
+  normal    – routine report, no immediate urgency
+  spam      – test data, gibberish, duplicate, or malicious submission
+
+Report details:
+  Type:        ${report.type || "N/A"}
+  Location:    ${report.location || "N/A"}
+  Organization:${report.org || "N/A"}
+  Date:        ${report.date || "N/A"}
+  Description: ${report.description || "N/A"}
+
+Respond with ONLY a JSON object in this exact format (no markdown, no explanation):
+{"criticality":"<level>","reason":"<one sentence reason>"}`;
+
+  try {
+    const ollamaRes = await fetch(`${OLLAMA_BASE}/api/generate`, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model:  OLLAMA_MODEL,
+        prompt,
+        stream: false,
+        options: { temperature: 0.1, num_predict: 120 },
+      }),
+      signal: AbortSignal.timeout(30000),
+    });
+
+    if (!ollamaRes.ok) {
+      console.warn(`[AUTO-ANALYZE] Ollama ${ollamaRes.status} for report ${report.id}`);
+      return;
+    }
+
+    const ollamaData = await ollamaRes.json();
+    const rawText = (ollamaData.response || "").trim();
+
+    let criticality = "normal";
+    let reason = "";
+
+    try {
+      const clean = rawText.replace(/```json|```/g, "").trim();
+      const match = clean.match(/\{[\s\S]*?\}/);
+      if (match) {
+        const parsed = JSON.parse(match[0]);
+        const VALID = ["critical", "important", "normal", "spam"];
+        criticality = VALID.includes(parsed.criticality) ? parsed.criticality : "normal";
+        reason = typeof parsed.reason === "string" ? parsed.reason.slice(0, 500) : "";
+      }
+    } catch {
+      // Fallback: keyword scan
+      const lower = rawText.toLowerCase();
+      if (lower.includes("critical"))       criticality = "critical";
+      else if (lower.includes("important")) criticality = "important";
+      else if (lower.includes("spam"))      criticality = "spam";
+      reason = "Auto-classified from AI response";
+    }
+
+    await db.query(
+      `UPDATE reports
+       SET criticality = $1, criticality_reason = $2, analyzed_at = NOW(), updated_at = NOW()
+       WHERE id = $3`,
+      [criticality, reason, report.id]
+    );
+
+    console.log(`[AUTO-ANALYZE] Report ${report.id} → ${criticality} ("${reason.slice(0, 60)}")`);
+
+  } catch (err) {
+    // Never throw — this is background work
+    if (err.name === "TimeoutError") {
+      console.warn(`[AUTO-ANALYZE] Ollama timeout for report ${report.id} — is Ollama running?`);
+    } else {
+      console.warn(`[AUTO-ANALYZE] Failed for report ${report.id}:`, err.message);
+    }
+  }
+}
+
+// ── Duplicate detection ───────────────────────────────────────────────────────
 const recentFingerprints = new Map();
-const DUPLICATE_WINDOW_MS = 60 * 1000; // 60 seconds
+const DUPLICATE_WINDOW_MS = 60 * 1000;
 
 function makeFingerprint(body) {
-  // A duplicate is same type + same description (lowercased, trimmed) within the window
   const type = (body.type || "").toLowerCase().trim();
   const desc = (body.description || "").toLowerCase().trim().slice(0, 120);
   return `${type}::${desc}`;
@@ -26,15 +110,13 @@ function isDuplicate(fingerprint) {
   return Date.now() - last < DUPLICATE_WINDOW_MS;
 }
 
-// Periodically prune stale fingerprints so the Map doesn't grow forever
 setInterval(() => {
   const now = Date.now();
   for (const [key, ts] of recentFingerprints) {
     if (now - ts > DUPLICATE_WINDOW_MS) recentFingerprints.delete(key);
   }
-}, 5 * 60 * 1000); // every 5 minutes
+}, 5 * 60 * 1000);
 
-// Basic input sanitiser — strips leading/trailing whitespace, caps length
 function sanitiseString(value, maxLen = 500) {
   if (typeof value !== "string") return "";
   return value.trim().slice(0, maxLen);
@@ -42,24 +124,12 @@ function sanitiseString(value, maxLen = 500) {
 
 // ── POST /api/reports ─────────────────────────────────────────────────────────
 router.post("/", async (req, res) => {
-  const {
-    type,
-    description,
-    date,
-    location,
-    org,
-    contact,
-    anonymous,
-    links,
-    reporterName, // ← new optional field
-  } = req.body;
+  const { type, description, date, location, org, contact, anonymous, links, reporterName } = req.body;
 
-  // Required fields
   if (!type || !description) {
     return res.status(400).json({ error: "type and description are required" });
   }
 
-  // Sanitise all string inputs
   const clean = {
     type:         sanitiseString(type, 100),
     description:  sanitiseString(description, 5000),
@@ -67,20 +137,18 @@ router.post("/", async (req, res) => {
     location:     sanitiseString(location, 200),
     org:          sanitiseString(org, 200),
     contact:      sanitiseString(contact, 200),
-    reporterName: sanitiseString(reporterName, 100), // new
+    reporterName: sanitiseString(reporterName, 100),
     anonymous:    anonymous !== false,
     links:        Array.isArray(links)
       ? links.map(l => sanitiseString(l, 500)).filter(Boolean).slice(0, 10)
       : [],
   };
 
-  // Validate links are URLs
   const urlPattern = /^https?:\/\/.+/i;
   if (clean.links.some(l => !urlPattern.test(l))) {
     return res.status(400).json({ error: "All evidence links must be valid URLs starting with http:// or https://" });
   }
 
-  // Duplicate guard
   const fingerprint = makeFingerprint(clean);
   if (isDuplicate(fingerprint)) {
     return res.status(429).json({ error: "A very similar report was just submitted. Please wait a moment before submitting again." });
@@ -90,6 +158,11 @@ router.post("/", async (req, res) => {
   try {
     const report = await db.createReport(clean);
     console.log(`[NEW REPORT] ${report.id} — ${report.type} — ${report.location || "no location"}`);
+
+    // ── Fire-and-forget AI analysis ──────────────────────────────────────────
+    // setImmediate pushes this after the response is sent, keeping latency zero.
+    setImmediate(() => autoAnalyze(report));
+
     return res.status(201).json({ success: true, report });
   } catch (err) {
     console.error(err);
@@ -97,16 +170,17 @@ router.post("/", async (req, res) => {
   }
 });
 
-// ── GET /api/reports/recent (must be BEFORE /:id) ────────────────────────────
+// ── GET /api/reports/recent ───────────────────────────────────────────────────
 router.get("/recent", async (_req, res) => {
   try {
     const all = await db.getAllReports();
     const recent = all.slice(0, 10).map(r => ({
-      id:       r.id,
-      location: r.location,
-      type:     r.type,
-      time:     timeAgo(r.created_at || r.createdAt),
-      status:   r.status,
+      id:           r.id,
+      location:     r.location,
+      type:         r.type,
+      time:         timeAgo(r.created_at || r.createdAt),
+      status:       r.status,
+      criticality:  r.criticality || null,
     }));
     return res.json(recent);
   } catch (err) {

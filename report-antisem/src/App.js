@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import Dashboard from "./Dashboard";
 
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
-const API_BASE = "http://192.168.12.187:3001";
+const API_BASE = "https://sacrifice-repair-alignment-constitution.trycloudflare.com";
 
 const NAV_LINKS = ["About Us", "Submit Offense", "Our Mission", "Press", "Contact Us", "Login"];
 

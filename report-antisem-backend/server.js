@@ -23,6 +23,9 @@ const ALLOWED_ORIGINS = [
   "http://127.0.0.1:3001",
   "http://192.168.12.187:3000",
   "http://192.168.12.187:3001",
+  "https://sacrifice-repair-alignment-constitution.trycloudflare.com",
+  "https://unexaggeratory-unaesthetically-asia.ngrok-free.dev"
+  
 ];
 
 const corsOptions = {

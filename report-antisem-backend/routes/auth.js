@@ -23,11 +23,12 @@ const db       = require("../db");
 const JWT_SECRET       = process.env.JWT_SECRET || "reportasa-dev-secret-change-in-production";
 const RESET_SECRET     = process.env.RESET_SECRET || JWT_SECRET + "-reset";   // separate secret for reset tokens
 const COOKIE_NAME      = "reportasa_token";
-const APP_URL          = process.env.APP_URL || "http://localhost:3000";
+const APP_URL          = process.env.APP_URL || "https://sacrifice-repair-alignment-constitution.trycloudflare.com";
 const COOKIE_OPTS = {
   httpOnly: true,
-  sameSite: "lax",
-  secure:   process.env.NODE_ENV === "production",
+  secure: true,
+  sameSite: "none",
+  // secure:   process.env.NODE_ENV === "production",
   maxAge:   7 * 24 * 60 * 60 * 1000,
 };
 

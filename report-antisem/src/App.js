@@ -36,45 +36,45 @@ const PRESS_RELEASES = [
   {
     date: "March 15, 2026",
     category: "Platform Update",
-    title: "ReportASA Reaches 10,000 Documented Incidents Nationwide",
-    excerpt: "ReportASA today announced a significant milestone: over 10,000 antisemitic incidents have been documented through the platform since its launch, representing a comprehensive national record of hate-based incidents against Jewish Americans.",
+    title: "ReportASA Reaches it's launch date!",
+    excerpt: "ReportASA today announced that it has launched in beta!",
     readTime: "3 min read",
-  },
-  {
-    date: "February 28, 2026",
-    category: "Partnership",
-    title: "ReportASA Partners with Major Civil Rights Organizations to Expand Reach",
-    excerpt: "ReportASA has formalized partnerships with leading civil rights organizations across 12 states, enabling more coordinated responses to reported incidents and providing affected individuals with direct access to legal resources.",
-    readTime: "4 min read",
-  },
-  {
-    date: "January 10, 2026",
-    category: "Research",
-    title: "New Report: Antisemitic Incidents Up 34% in Educational Institutions",
-    excerpt: "ReportASA's annual data analysis reveals a significant increase in documented antisemitic incidents within educational settings. The report, compiled from verified submissions over the past year, highlights emerging patterns and geographic hotspots.",
-    readTime: "6 min read",
-  },
-  {
-    date: "December 5, 2026",
-    category: "Community",
-    title: "ReportASA Launches Anonymous Reporting Feature for Workplace Incidents",
-    excerpt: "In response to community feedback, ReportASA has enhanced its workplace reporting pathway with fully anonymized submissions, end-to-end encryption, and direct escalation options to appropriate labor regulatory bodies.",
-    readTime: "3 min read",
-  },
-  {
-    date: "October 22, 2026",
-    category: "Platform Update",
-    title: "ReportASA Dashboard Now Available to Partner Organizations",
-    excerpt: "Verified partner organizations and advocacy groups can now access a dedicated dashboard to track incident trends in their regions, coordinate responses, and download anonymized data for research and policy work.",
-    readTime: "5 min read",
-  },
-  {
-    date: "September 1, 2026",
-    category: "Launch",
-    title: "ReportASA Officially Launches Nationwide Antisemitism Reporting Platform",
-    excerpt: "After months of development and community consultation, ReportASA officially launched its national platform for documenting and responding to antisemitic incidents across the United States, with initial coverage in all 50 states.",
-    readTime: "4 min read",
-  },
+  }
+  // {
+  //   date: "February 28, 2026",
+  //   category: "Partnership",
+  //   title: "ReportASA Partners with Major Civil Rights Organizations to Expand Reach",
+  //   excerpt: "ReportASA has formalized partnerships with leading civil rights organizations across 12 states, enabling more coordinated responses to reported incidents and providing affected individuals with direct access to legal resources.",
+  //   readTime: "4 min read",
+  // },
+  // {
+  //   date: "January 10, 2026",
+  //   category: "Research",
+  //   title: "New Report: Antisemitic Incidents Up 34% in Educational Institutions",
+  //   excerpt: "ReportASA's annual data analysis reveals a significant increase in documented antisemitic incidents within educational settings. The report, compiled from verified submissions over the past year, highlights emerging patterns and geographic hotspots.",
+  //   readTime: "6 min read",
+  // },
+  // {
+  //   date: "December 5, 2026",
+  //   category: "Community",
+  //   title: "ReportASA Launches Anonymous Reporting Feature for Workplace Incidents",
+  //   excerpt: "In response to community feedback, ReportASA has enhanced its workplace reporting pathway with fully anonymized submissions, end-to-end encryption, and direct escalation options to appropriate labor regulatory bodies.",
+  //   readTime: "3 min read",
+  // },
+  // {
+  //   date: "October 22, 2026",
+  //   category: "Platform Update",
+  //   title: "ReportASA Dashboard Now Available to Partner Organizations",
+  //   excerpt: "Verified partner organizations and advocacy groups can now access a dedicated dashboard to track incident trends in their regions, coordinate responses, and download anonymized data for research and policy work.",
+  //   readTime: "5 min read",
+  // },
+  // {
+  //   date: "September 1, 2026",
+  //   category: "Launch",
+  //   title: "ReportASA Officially Launches Nationwide Antisemitism Reporting Platform",
+  //   excerpt: "After months of development and community consultation, ReportASA officially launched its national platform for documenting and responding to antisemitic incidents across the United States, with initial coverage in all 50 states.",
+  //   readTime: "4 min read",
+  // },
 ];
 
 const PRESS_CATEGORY_COLORS = {
@@ -786,7 +786,7 @@ export default function App() {
               <h1 style={{ fontFamily: "'DM Serif Display',serif", fontSize: "clamp(36px,7vw,68px)", lineHeight: 1.08, letterSpacing: "-0.03em", marginBottom: 22 }}>
                 Why We<br /><span style={{ background: "linear-gradient(135deg,#e8c56d,#f0d488,#c9972a)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundSize: "200%", animation: "gShift 4s ease infinite" }}>Exist</span>
               </h1>
-              <p style={{ fontSize: mobile ? 15 : 17, color: "rgba(255,255,255,.5)", lineHeight: 1.75, fontWeight: 300 }}>Antisemitism doesn't disappear when it goes unreported. We exist to make sure every incident leaves a record, gets a response, and helps build a safer future for Jewish communities everywhere.</p>
+              <p style={{ fontSize: mobile ? 15 : 17, color: "rgba(255,255,255,.5)", lineHeight: 1.75, fontWeight: 300 }}>Antisemitism doesn't disappear when it goes unreported. We exist to make sure every incident is documented, every report is taken seriously, and communities have the information they need to respond and build a safer future for Jewish communities everywhere.</p>
             </div>
           </section>
           <section style={{ padding: mobile ? "0 16px 64px" : "0 48px 80px", maxWidth: 1060, margin: "0 auto" }}>

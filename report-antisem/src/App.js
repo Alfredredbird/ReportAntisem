@@ -55,21 +55,21 @@ const PRESS_RELEASES = [
     readTime: "6 min read",
   },
   {
-    date: "December 5, 2025",
+    date: "December 5, 2026",
     category: "Community",
     title: "ReportASA Launches Anonymous Reporting Feature for Workplace Incidents",
     excerpt: "In response to community feedback, ReportASA has enhanced its workplace reporting pathway with fully anonymized submissions, end-to-end encryption, and direct escalation options to appropriate labor regulatory bodies.",
     readTime: "3 min read",
   },
   {
-    date: "October 22, 2025",
+    date: "October 22, 2026",
     category: "Platform Update",
     title: "ReportASA Dashboard Now Available to Partner Organizations",
     excerpt: "Verified partner organizations and advocacy groups can now access a dedicated dashboard to track incident trends in their regions, coordinate responses, and download anonymized data for research and policy work.",
     readTime: "5 min read",
   },
   {
-    date: "September 1, 2025",
+    date: "September 1, 2026",
     category: "Launch",
     title: "ReportASA Officially Launches Nationwide Antisemitism Reporting Platform",
     excerpt: "After months of development and community consultation, ReportASA officially launched its national platform for documenting and responding to antisemitic incidents across the United States, with initial coverage in all 50 states.",
@@ -791,7 +791,7 @@ export default function App() {
           </section>
           <section style={{ padding: mobile ? "0 16px 64px" : "0 48px 80px", maxWidth: 1060, margin: "0 auto" }}>
             <div style={{ display: "grid", gridTemplateColumns: mobile ? "repeat(2,1fr)" : "repeat(4,1fr)", gap: mobile ? 10 : 16 }}>
-              {[{ num:"2025",label:"Year Founded",icon:"📅"},{num:"10+",label:"Partner Orgs",icon:"🤝"},{num:"38",label:"States Reached",icon:"🗺️"},{num:"100%",label:"Volunteer-Led",icon:"❤️"}].map((s,i)=>(
+              {[{ num:"2026",label:"Year Founded",icon:"📅"},{num:"10+",label:"Partner Orgs",icon:"🤝"},{num:"38",label:"States Reached",icon:"🗺️"},{num:"100%",label:"Volunteer-Led",icon:"❤️"}].map((s,i)=>(
                 <div key={i} style={{ background:"rgba(255,255,255,.03)",border:"1px solid rgba(255,255,255,.08)",borderRadius:14,padding:mobile?"18px 14px":"22px 18px",textAlign:"center"}}>
                   <div style={{fontSize:24,marginBottom:8}}>{s.icon}</div>
                   <div style={{fontSize:"clamp(22px,4vw,32px)",fontWeight:800,color:"#e8c56d",fontFamily:"'DM Serif Display',serif",letterSpacing:-1,marginBottom:5}}>{s.num}</div>
@@ -1130,7 +1130,7 @@ export default function App() {
           <p style={{ color: "rgba(255,255,255,.45)", fontSize: 15, marginBottom: 48, lineHeight: 1.7, maxWidth: 560 }}>Have a question, want to partner with us, or need help with a report? We're here. Reach out and our team will respond within 48 hours.</p>
           <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "1fr 1fr", gap: mobile ? 40 : 56, alignItems: "start" }}>
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              {[{icon:"✉️",label:"Email",value:"hello@reportasa.org",sub:"General inquiries & partnerships"},{icon:"🔒",label:"Secure Tips",value:"secure@reportasa.org",sub:"Sensitive or confidential matters"},{icon:"📞",label:"Hotline",value:"1-800-REPORT-ASA",sub:"Mon–Fri, 9am–6pm EST"},{icon:"🐦",label:"Twitter / X",value:"@ReportASA",sub:"Follow for updates"}].map((c,i)=>(
+              {[{icon:"✉️",label:"Email",value:"hello@reportasa.org",sub:"General inquiries & partnerships"},{icon:"🔒",label:"Secure Tips",value:"secure@reportasa.org",sub:"Sensitive or confidential matters"},{icon:"🐦",label:"Twitter / X",value:"@ReportASA",sub:"Follow for updates"}].map((c,i)=>(
                 <div key={i} style={{background:"rgba(255,255,255,.03)",border:"1px solid rgba(255,255,255,.08)",borderRadius:14,padding:"18px 20px",display:"flex",gap:16,alignItems:"flex-start",transition:"border-color .2s, background .2s"}}
                   onMouseEnter={e=>{e.currentTarget.style.background="rgba(232,197,109,.04)";e.currentTarget.style.borderColor="rgba(232,197,109,.2)";}}
                   onMouseLeave={e=>{e.currentTarget.style.background="rgba(255,255,255,.03)";e.currentTarget.style.borderColor="rgba(255,255,255,.08)";}}>

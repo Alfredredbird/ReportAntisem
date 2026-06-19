@@ -746,12 +746,12 @@ export default function App() {
           <h2 style={{ fontFamily: "'DM Serif Display',serif", fontSize: "clamp(24px,4vw,38px)", letterSpacing: "-0.02em", marginBottom: 36 }}>People Behind the Platform</h2>
           <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "repeat(auto-fill,minmax(260px,1fr))", gap: 20, marginBottom: 64 }}>
             {[
-              { name: "Sarah Cohen",     role: "Founder & Executive Director", emoji: "👩‍💼", bio: "Founded ReportASA after personally experiencing antisemitism go unaddressed in her neighborhood.", social: "@sarahcohen" },
-              { name: "David Levine",    role: "Lead Developer",               emoji: "👨‍💻", bio: "Full-stack engineer with 10+ years of experience building community safety tools.", social: "@dlevine_dev" },
-              { name: "Rachel Goldberg", role: "Head of Community Outreach",   emoji: "👩‍🤝‍👩", bio: "Connects ReportASA with local organizations, synagogues, and advocacy groups nationwide.", social: "@rachelg" },
-              { name: "Michael Stern",   role: "Legal Advisor",                emoji: "⚖️",  bio: "Civil rights attorney who ensures every report is handled in accordance with applicable law.", social: "@msternlaw" },
-              { name: "Alyssa Weiss",    role: "Data & Research Analyst",      emoji: "📊",  bio: "Transforms incident data into actionable insights that inform policy and advocacy work.", social: "@alyssaweiss" },
-              { name: "Jordan Katz",     role: "Operations Manager",           emoji: "🗂️",  bio: "Keeps the team running smoothly and ensures every submission receives a timely response.", social: "@jordankatz" },
+              { name: "Zionist.OSINT",     role: "Founder & Executive Director", emoji: "👩‍💼", bio: "Founded ReportASA after personally experiencing antisemitism go unaddressed in his neighborhood.", social: "@reportasa" },
+              { name: "None Currently",    role: "Lead Developer",               emoji: "👨‍💻", bio: "Full-stack engineer with 10+ years of experience building community safety tools.", social: "@dlevine_dev" },
+              { name: "None Currently", role: "Head of Community Outreach",   emoji: "👩‍🤝‍👩", bio: "Connects ReportASA with local organizations, synagogues, and advocacy groups nationwide.", social: "@rachelg" },
+              { name: "None Currently",   role: "Legal Advisor",                emoji: "⚖️",  bio: "Civil rights attorney who ensures every report is handled in accordance with applicable law.", social: "@msternlaw" },
+              { name: "None Currently",    role: "Data & Research Analyst",      emoji: "📊",  bio: "Transforms incident data into actionable insights that inform policy and advocacy work.", social: "@alyssaweiss" },
+              { name: "None Currently",     role: "Operations Manager",           emoji: "🗂️",  bio: "Keeps the team running smoothly and ensures every submission receives a timely response.", social: "@jordankatz" },
             ].map((member, i) => (
               <div key={i} style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.08)", borderRadius: 16, padding: "24px 22px", transition: "all .25s", cursor: "default" }}
                 onMouseEnter={e => { e.currentTarget.style.background = "rgba(232,197,109,.05)"; e.currentTarget.style.borderColor = "rgba(232,197,109,.25)"; e.currentTarget.style.transform = "translateY(-3px)"; }}
@@ -791,7 +791,7 @@ export default function App() {
           </section>
           <section style={{ padding: mobile ? "0 16px 64px" : "0 48px 80px", maxWidth: 1060, margin: "0 auto" }}>
             <div style={{ display: "grid", gridTemplateColumns: mobile ? "repeat(2,1fr)" : "repeat(4,1fr)", gap: mobile ? 10 : 16 }}>
-              {[{ num:"2026",label:"Year Founded",icon:"📅"},{num:"10+",label:"Partner Orgs",icon:"🤝"},{num:"38",label:"States Reached",icon:"🗺️"},{num:"100%",label:"Volunteer-Led",icon:"❤️"}].map((s,i)=>(
+              {[{ num:"2026",label:"Year Founded",icon:"📅"},{num:"0",label:"Partner Orgs",icon:"🤝"},{num:"38",label:"States Reached",icon:"🗺️"},{num:"100%",label:"Volunteer-Led",icon:"❤️"}].map((s,i)=>(
                 <div key={i} style={{ background:"rgba(255,255,255,.03)",border:"1px solid rgba(255,255,255,.08)",borderRadius:14,padding:mobile?"18px 14px":"22px 18px",textAlign:"center"}}>
                   <div style={{fontSize:24,marginBottom:8}}>{s.icon}</div>
                   <div style={{fontSize:"clamp(22px,4vw,32px)",fontWeight:800,color:"#e8c56d",fontFamily:"'DM Serif Display',serif",letterSpacing:-1,marginBottom:5}}>{s.num}</div>

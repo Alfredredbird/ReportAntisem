@@ -411,6 +411,10 @@ export default function App() {
 
   const handleFullSubmit = async () => {
     if (!form.type || !form.description) return;
+    if (!form.contact || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.contact.trim())) {
+      setSubmitErr("A valid email address is required before submitting.");
+      return;
+    
     setSubmitSt("loading"); setSubmitErr("");
     try {
       await postReport({ ...form, links: links.filter(l => l.trim()) });
@@ -708,7 +712,8 @@ export default function App() {
   <input className="input-field" placeholder="First name or full name" value={form.reporterName} onChange={e => setForm(p => ({ ...p, reporterName: e.target.value }))} />
 </div>
               <LinkInputs links={links} setLinks={setLinks} />
-              <div><label style={LABEL}>Contact Email (optional)</label>
+                    <div><label style={LABEL}>Contact Email <span style={{ color: "#ef4444" }}>*</span></label>
+
                 <input className="input-field" type="email" placeholder="For follow-up if needed" value={form.contact} onChange={e => setForm(p => ({ ...p, contact: e.target.value }))} />
               </div>
               <div style={{ display: "flex", alignItems: "flex-start", gap: 11, background: "rgba(255,255,255,.03)", borderRadius: 10, padding: 15 }}>

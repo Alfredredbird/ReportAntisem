@@ -40,41 +40,6 @@ const PRESS_RELEASES = [
     excerpt: "ReportASA today announced that it has launched in beta!",
     readTime: "3 min read",
   }
-  // {
-  //   date: "February 28, 2026",
-  //   category: "Partnership",
-  //   title: "ReportASA Partners with Major Civil Rights Organizations to Expand Reach",
-  //   excerpt: "ReportASA has formalized partnerships with leading civil rights organizations across 12 states, enabling more coordinated responses to reported incidents and providing affected individuals with direct access to legal resources.",
-  //   readTime: "4 min read",
-  // },
-  // {
-  //   date: "January 10, 2026",
-  //   category: "Research",
-  //   title: "New Report: Antisemitic Incidents Up 34% in Educational Institutions",
-  //   excerpt: "ReportASA's annual data analysis reveals a significant increase in documented antisemitic incidents within educational settings. The report, compiled from verified submissions over the past year, highlights emerging patterns and geographic hotspots.",
-  //   readTime: "6 min read",
-  // },
-  // {
-  //   date: "December 5, 2026",
-  //   category: "Community",
-  //   title: "ReportASA Launches Anonymous Reporting Feature for Workplace Incidents",
-  //   excerpt: "In response to community feedback, ReportASA has enhanced its workplace reporting pathway with fully anonymized submissions, end-to-end encryption, and direct escalation options to appropriate labor regulatory bodies.",
-  //   readTime: "3 min read",
-  // },
-  // {
-  //   date: "October 22, 2026",
-  //   category: "Platform Update",
-  //   title: "ReportASA Dashboard Now Available to Partner Organizations",
-  //   excerpt: "Verified partner organizations and advocacy groups can now access a dedicated dashboard to track incident trends in their regions, coordinate responses, and download anonymized data for research and policy work.",
-  //   readTime: "5 min read",
-  // },
-  // {
-  //   date: "September 1, 2026",
-  //   category: "Launch",
-  //   title: "ReportASA Officially Launches Nationwide Antisemitism Reporting Platform",
-  //   excerpt: "After months of development and community consultation, ReportASA officially launched its national platform for documenting and responding to antisemitic incidents across the United States, with initial coverage in all 50 states.",
-  //   readTime: "4 min read",
-  // },
 ];
 
 const PRESS_CATEGORY_COLORS = {
@@ -179,6 +144,9 @@ export default function App() {
   const [menuOpen,  setMenuOpen]  = useState(false);
   const [statsVis,  setStatsVis]  = useState(false);
 
+  // Login disabled modal
+  const [loginDisabledModal, setLoginDisabledModal] = useState(false);
+
   // API data
   const [apiStats, setApiStats] = useState({ reports_submitted: 0, cases_resolved_pct: 0, states_covered: 0, community_members: 0 });
   const [feed,     setFeed]     = useState(FALLBACK_REPORTS);
@@ -197,7 +165,7 @@ export default function App() {
 
   // Auth state
   const [user,     setUser]     = useState(null);
-  const [authView, setAuthView] = useState("login"); // "login"|"register"|"forgot"|"reset"
+  const [authView, setAuthView] = useState("login");
   const [authForm, setAuthForm] = useState({ email: "", password: "", name: "", title: "", department: "", bio: "" });
   const [authSt,   setAuthSt]   = useState("idle");
   const [authErr,  setAuthErr]  = useState("");
@@ -265,7 +233,6 @@ export default function App() {
       setUser(data.user);
       setAuthSt("idle");
       setAuthForm({ email: "", password: "", name: "", title: "", department: "", bio: "" });
-      // On mobile: close menu and redirect appropriately
       setMenuOpen(false);
       if (data.user?.role === "admin" || data.user?.role === "team") {
         setPage("dashboard");
@@ -348,12 +315,9 @@ export default function App() {
     } catch { setChangePassSt("error"); setChangePassErr("Could not connect to server."); }
   };
 
+  // ── Login is disabled — show modal instead of navigating ─────────────────
   const handleProfileClick = () => {
-    if (user?.role === "admin" || user?.role === "team") {
-      setPage("dashboard");
-    } else {
-      setPage("login");
-    }
+    setLoginDisabledModal(true);
   };
 
   // ── Fetch stats + feed ────────────────────────────────────────────────────
@@ -389,14 +353,14 @@ export default function App() {
   }, [page]);
 
   const goPage = (label) => {
-    const map = { "About Us": "about", "Submit Offense": "submit", "Our Mission": "mission", "Login": "login", "Contact Us": "contact", "Press": "press" };
-    const target = map[label] || "home";
-    // If logged in and clicking Login → profile or dashboard
-    if (label === "Login" && user) {
-      handleProfileClick();
+    // Login is disabled — intercept all login navigation
+    if (label === "Login") {
+      setLoginDisabledModal(true);
       setMenuOpen(false);
       return;
     }
+    const map = { "About Us": "about", "Submit Offense": "submit", "Our Mission": "mission", "Contact Us": "contact", "Press": "press" };
+    const target = map[label] || "home";
     setPage(target);
     setMenuOpen(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -414,7 +378,7 @@ export default function App() {
     if (!form.contact || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.contact.trim())) {
       setSubmitErr("A valid email address is required before submitting.");
       return;
-    
+    }
     setSubmitSt("loading"); setSubmitErr("");
     try {
       await postReport({ ...form, links: links.filter(l => l.trim()) });
@@ -469,6 +433,61 @@ export default function App() {
         .press-card:hover{background:rgba(255,255,255,.05);border-color:rgba(232,197,109,.25);transform:translateY(-2px)}
       `}</style>
 
+      {/* ── LOGIN DISABLED MODAL ── */}
+      {loginDisabledModal && (
+        <div
+          onClick={() => setLoginDisabledModal(false)}
+          style={{
+            position: "fixed", inset: 0, zIndex: 9999,
+            background: "rgba(0,0,0,0.75)", backdropFilter: "blur(6px)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            padding: "20px",
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: "#13131a",
+              border: "1px solid rgba(232,197,109,0.25)",
+              borderRadius: 20,
+              padding: mobile ? "32px 24px" : "44px 44px",
+              maxWidth: 420,
+              width: "100%",
+              textAlign: "center",
+              animation: "fadeUp .25s ease both",
+            }}
+          >
+            <div style={{ width: 60, height: 60, background: "rgba(232,197,109,0.1)", border: "1px solid rgba(232,197,109,0.25)", borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, margin: "0 auto 20px" }}>🔒</div>
+            <h2 style={{
+              fontFamily: "'DM Serif Display',serif",
+              fontSize: "clamp(22px,4vw,28px)",
+              letterSpacing: "-0.02em",
+              marginBottom: 12,
+              color: "#f0eee8",
+            }}>
+              Logins Temporarily Disabled
+            </h2>
+            <p style={{
+              fontSize: 14,
+              lineHeight: 1.75,
+              color: "rgba(255,255,255,0.5)",
+              marginBottom: 28,
+              maxWidth: 300,
+              margin: "0 auto 28px",
+            }}>
+              We're currently finalizing our privacy policy. Account access will be restored shortly — thank you for your patience.
+            </p>
+            <button
+              className="cta"
+              style={{ padding: "12px 32px", fontSize: 14 }}
+              onClick={() => setLoginDisabledModal(false)}
+            >
+              Got it
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── NAV ── */}
       <nav style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 200, background: scrolled ? "rgba(10,10,15,.95)" : "transparent", backdropFilter: scrolled ? "blur(20px)" : "none", borderBottom: scrolled ? "1px solid rgba(255,255,255,.06)" : "none", transition: "all .3s", padding: "0 20px", height: 62, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <button onClick={() => { setPage("home"); window.scrollTo({ top: 0 }); }} style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 9 }}>
@@ -483,40 +502,14 @@ export default function App() {
               ? <button key={l} className="cta" style={{ padding: "8px 16px", fontSize: 13 }} onClick={() => goPage(l)}>{l}</button>
               : <button key={l} className="nav-btn" onClick={() => goPage(l)}>{l}</button>
             )}
-            {user ? (
-              <button onClick={handleProfileClick} style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(232,197,109,.08)", border: "1px solid rgba(232,197,109,.2)", borderRadius: 8, padding: "6px 12px", cursor: "pointer", marginLeft: 4 }}>
-                <div style={{ width: 26, height: 26, borderRadius: "50%", background: "linear-gradient(135deg,#e8c56d,#c9972a)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "#0a0a0f", fontWeight: 700 }}>
-                  {user.name?.charAt(0).toUpperCase()}
-                </div>
-                <span style={{ fontSize: 13, fontWeight: 500, color: "#e8c56d", maxWidth: 100, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.name?.split(" ")[0]}</span>
-                {(user.role === "admin" || user.role === "team") && (
-                  <span style={{ fontSize: 10, background: "rgba(232,197,109,.2)", borderRadius: 4, padding: "1px 5px", color: "#e8c56d" }}>⚙</span>
-                )}
-              </button>
-            ) : (
-              <button className="nav-btn" onClick={() => goPage("Login")}>Login</button>
-            )}
+            {/* Login button always shows the disabled modal */}
+            <button className="nav-btn" onClick={() => setLoginDisabledModal(true)}>Login</button>
           </div>
         )}
 
-        {/* Mobile: show user avatar OR hamburger */}
+        {/* Mobile hamburger */}
         {mobile && (
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            {/* User avatar pill — always visible when logged in */}
-            {user && (
-              <button onClick={handleProfileClick} style={{ display: "flex", alignItems: "center", gap: 7, background: "rgba(232,197,109,.08)", border: "1px solid rgba(232,197,109,.2)", borderRadius: 8, padding: "5px 10px", cursor: "pointer" }}>
-                <div style={{ width: 22, height: 22, borderRadius: "50%", background: "linear-gradient(135deg,#e8c56d,#c9972a)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, color: "#0a0a0f", fontWeight: 700, flexShrink: 0 }}>
-                  {user.name?.charAt(0).toUpperCase()}
-                </div>
-                <span style={{ fontSize: 12, fontWeight: 600, color: "#e8c56d", maxWidth: 70, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {user.name?.split(" ")[0]}
-                </span>
-                {(user.role === "admin" || user.role === "team") && (
-                  <span style={{ fontSize: 9, background: "rgba(232,197,109,.2)", borderRadius: 4, padding: "1px 4px", color: "#e8c56d" }}>⚙</span>
-                )}
-              </button>
-            )}
-            {/* Hamburger */}
             <button onClick={() => setMenuOpen(o => !o)} style={{ background: "none", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", gap: 5, padding: 4 }}>
               {[0,1,2].map(i => (
                 <span key={i} style={{ display: "block", width: 23, height: 2, background: "#f0eee8", borderRadius: 2, transition: "all .25s", transform: menuOpen && i===0 ? "rotate(45deg) translate(5px,5px)" : menuOpen && i===2 ? "rotate(-45deg) translate(5px,-5px)" : "none", opacity: menuOpen && i===1 ? 0 : 1 }} />
@@ -526,38 +519,17 @@ export default function App() {
         )}
       </nav>
 
-      {/* Mobile drawer — position:fixed, no horizontal scroll, touch-action locked */}
+      {/* Mobile drawer */}
       {mobile && menuOpen && (
         <div
           style={{ position: "fixed", top: 62, left: 0, right: 0, bottom: 0, zIndex: 150, background: "rgba(10,10,15,.98)", backdropFilter: "blur(20px)", padding: "20px 28px", animation: "fadeUp .2s ease", overflowY: "auto", overflowX: "hidden", touchAction: "pan-y" }}
           onTouchMove={e => e.stopPropagation()}
         >
-          {/* Show user info at top if logged in */}
-          {user && (
-            <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 0 20px", marginBottom: 4, borderBottom: "1px solid rgba(255,255,255,.08)" }}>
-              <div style={{ width: 38, height: 38, borderRadius: "50%", background: "linear-gradient(135deg,#e8c56d,#c9972a)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 700, color: "#0a0a0f", flexShrink: 0 }}>
-                {user.name?.charAt(0).toUpperCase()}
-              </div>
-              <div>
-                <div style={{ fontWeight: 600, fontSize: 14, color: "#f0eee8" }}>{user.name}</div>
-                <div style={{ fontSize: 12, color: "#e8c56d", fontWeight: 500, textTransform: "capitalize" }}>{user.role}</div>
-              </div>
-            </div>
-          )}
-          {NAV_LINKS.map(l => {
-            // Replace "Login" with context-aware label
-            const label = l === "Login" && user ? (user.role === "admin" || user.role === "team" ? "Dashboard ⚙" : "My Profile") : l;
-            return (
-              <button key={l} className="mob-item" onClick={() => goPage(l)} style={{ color: l === "Submit Offense" ? "#e8c56d" : "#f0eee8" }}>
-                {label}
-              </button>
-            );
-          })}
-          {user && (
-            <button className="mob-item" onClick={handleLogout} style={{ color: "#ef4444", borderBottom: "none", marginTop: 8 }}>
-              Sign Out
+          {NAV_LINKS.map(l => (
+            <button key={l} className="mob-item" onClick={() => goPage(l)} style={{ color: l === "Submit Offense" ? "#e8c56d" : "#f0eee8" }}>
+              {l}
             </button>
-          )}
+          ))}
         </div>
       )}
 
@@ -709,11 +681,10 @@ export default function App() {
                 <textarea className="input-field" rows={6} placeholder="Describe what happened in as much detail as you're comfortable sharing..." style={{ resize: "vertical" }} value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} />
               </div>
               <div><label style={LABEL}>Your Name <span style={{ color: "rgba(255,255,255,.3)", fontWeight: 400 }}>(optional)</span></label>
-  <input className="input-field" placeholder="First name or full name" value={form.reporterName} onChange={e => setForm(p => ({ ...p, reporterName: e.target.value }))} />
-</div>
+                <input className="input-field" placeholder="First name or full name" value={form.reporterName} onChange={e => setForm(p => ({ ...p, reporterName: e.target.value }))} />
+              </div>
               <LinkInputs links={links} setLinks={setLinks} />
-                    <div><label style={LABEL}>Contact Email <span style={{ color: "#ef4444" }}>*</span></label>
-
+              <div><label style={LABEL}>Contact Email <span style={{ color: "#ef4444" }}>*</span></label>
                 <input className="input-field" type="email" placeholder="For follow-up if needed" value={form.contact} onChange={e => setForm(p => ({ ...p, contact: e.target.value }))} />
               </div>
               <div style={{ display: "flex", alignItems: "flex-start", gap: 11, background: "rgba(255,255,255,.03)", borderRadius: 10, padding: 15 }}>
@@ -901,7 +872,6 @@ export default function App() {
               return (
                 <div key={i} className="press-card" onClick={() => setExpandedPress(isExpanded ? null : i)}
                   style={{ background: isExpanded ? "rgba(255,255,255,.05)" : "rgba(255,255,255,.03)", borderColor: isExpanded ? "rgba(232,197,109,.25)" : "rgba(255,255,255,.08)" }}>
-                  {/* Header row */}
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 10 }}>
                     <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
                       <span style={{ fontSize: 11, fontWeight: 700, color: catColor, background: `${catColor}15`, border: `1px solid ${catColor}30`, borderRadius: 100, padding: "3px 10px", whiteSpace: "nowrap" }}>{pr.category}</span>
@@ -910,13 +880,9 @@ export default function App() {
                     </div>
                     <span style={{ fontSize: 14, color: "rgba(255,255,255,.3)", transition: "transform .2s", transform: isExpanded ? "rotate(180deg)" : "none", flexShrink: 0, marginTop: 2 }}>▼</span>
                   </div>
-
-                  {/* Title */}
                   <h3 style={{ fontFamily: "'DM Serif Display',serif", fontSize: mobile ? 17 : 20, lineHeight: 1.35, letterSpacing: "-0.01em", color: "#f0eee8", marginBottom: isExpanded ? 16 : 0 }}>
                     {pr.title}
                   </h3>
-
-                  {/* Expanded body */}
                   {isExpanded && (
                     <div style={{ borderTop: "1px solid rgba(255,255,255,.08)", paddingTop: 16 }}>
                       <p style={{ fontSize: 14, color: "rgba(255,255,255,.6)", lineHeight: 1.75, marginBottom: 20 }}>{pr.excerpt}</p>
@@ -946,183 +912,6 @@ export default function App() {
               Request Media Kit →
             </button>
           </div>
-        </div>
-      )}
-
-      {/* ══════════════════════════ LOGIN / PROFILE ══════════════════════════ */}
-      {page === "login" && (
-        <div style={{ maxWidth: 480, margin: "0 auto", padding: mobile ? "90px 16px 80px" : "110px 24px 80px", animation: "fadeUp .6s ease both" }}>
-          {user ? (
-            <>
-              <button onClick={() => setPage("home")} style={{ background: "none", border: "none", color: "rgba(255,255,255,.42)", cursor: "pointer", fontSize: 14, marginBottom: 32 }}>← Back</button>
-              <div style={{ display: "flex", alignItems: "center", gap: 20, marginBottom: 28, padding: "22px 24px", background: "linear-gradient(135deg,rgba(232,197,109,.08),rgba(232,197,109,.03))", border: "1px solid rgba(232,197,109,.2)", borderRadius: 18 }}>
-                <div style={{ width: 60, height: 60, borderRadius: "50%", background: "linear-gradient(135deg,#e8c56d,#c9972a)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, fontWeight: 700, color: "#0a0a0f", flexShrink: 0 }}>{user.name?.charAt(0).toUpperCase()}</div>
-                <div>
-                  <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 20, marginBottom: 2 }}>{user.name}</div>
-                  {user.title && <div style={{ fontSize: 12, color: "#e8c56d", fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", marginBottom: 2 }}>{user.title}</div>}
-                  {user.department && <div style={{ fontSize: 13, color: "rgba(255,255,255,.4)" }}>{user.department}</div>}
-                </div>
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 24 }}>
-                {[{ label:"Email",value:user.email,icon:"✉️"},{label:"Role",value:user.role,icon:"🔑"},{label:"Member since",value:user.createdAt?new Date(user.createdAt).toLocaleDateString("en-US",{month:"long",year:"numeric"}):"—",icon:"📅"},{label:"Last login",value:user.lastLoginAt?new Date(user.lastLoginAt).toLocaleString():"—",icon:"🕐"}].map((row,i)=>(
-                  <div key={i} style={{display:"flex",alignItems:"center",gap:12,background:"rgba(255,255,255,.03)",border:"1px solid rgba(255,255,255,.07)",borderRadius:12,padding:"12px 14px"}}>
-                    <span style={{fontSize:17,flexShrink:0}}>{row.icon}</span>
-                    <div>
-                      <div style={{fontSize:11,color:"rgba(255,255,255,.35)",letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:2}}>{row.label}</div>
-                      <div style={{fontSize:13,fontWeight:500}}>{row.value||"—"}</div>
-                    </div>
-                  </div>
-                ))}
-                {user.bio && (
-                  <div style={{background:"rgba(255,255,255,.03)",border:"1px solid rgba(255,255,255,.07)",borderRadius:12,padding:"12px 14px"}}>
-                    <div style={{fontSize:11,color:"rgba(255,255,255,.35)",letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:6}}>Bio</div>
-                    <div style={{fontSize:13,color:"rgba(255,255,255,.65)",lineHeight:1.6}}>{user.bio}</div>
-                  </div>
-                )}
-              </div>
-              {/* Change password */}
-              <div style={{ background:"rgba(255,255,255,.03)",border:"1px solid rgba(255,255,255,.08)",borderRadius:14,padding:"18px 18px",marginBottom:14}}>
-                <div style={{fontSize:13,fontWeight:600,marginBottom:14,display:"flex",alignItems:"center",gap:8}}>🔐 <span>Change Password</span></div>
-                {changePassSt === "success" ? (
-                  <div style={{background:"rgba(16,185,129,.07)",border:"1px solid rgba(16,185,129,.2)",borderRadius:10,padding:"12px 14px",fontSize:13,color:"#10b981"}}>
-                    ✓ Password changed successfully.
-                    <button style={{background:"none",border:"none",color:"rgba(255,255,255,.4)",fontSize:12,cursor:"pointer",marginLeft:8}} onClick={()=>setChangePassSt("idle")}>Dismiss</button>
-                  </div>
-                ) : (
-                  <div style={{display:"flex",flexDirection:"column",gap:11}}>
-                    <div><label style={LABEL}>Current Password</label><input className="input-field" type="password" placeholder="••••••••" value={changePassForm.current} onChange={e=>setChangePassForm(p=>({...p,current:e.target.value}))}/></div>
-                    <div><label style={LABEL}>New Password</label><input className="input-field" type="password" placeholder="Min. 8 characters" value={changePassForm.newPass} onChange={e=>setChangePassForm(p=>({...p,newPass:e.target.value}))}/></div>
-                    <div><label style={LABEL}>Confirm New Password</label><input className="input-field" type="password" placeholder="Repeat new password" value={changePassForm.confirm} onChange={e=>setChangePassForm(p=>({...p,confirm:e.target.value}))}/></div>
-                    {changePassErr && <div style={{background:"rgba(239,68,68,.07)",border:"1px solid rgba(239,68,68,.22)",borderRadius:8,padding:"10px 12px",fontSize:13,color:"#ef4444"}}>⚠ {changePassErr}</div>}
-                    <button className="cta" style={{padding:"11px",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",gap:8}} onClick={handleChangePassword} disabled={changePassSt==="loading"||!changePassForm.current||!changePassForm.newPass}>
-                      {changePassSt==="loading"?<><Spinner/> Changing…</>:"Change Password →"}
-                    </button>
-                  </div>
-                )}
-              </div>
-              <button onClick={handleLogout} style={{width:"100%",background:"rgba(239,68,68,.08)",border:"1px solid rgba(239,68,68,.25)",color:"#ef4444",borderRadius:10,padding:13,fontSize:14,cursor:"pointer",fontFamily:"'Outfit',sans-serif",fontWeight:600,transition:"all .2s"}}
-                onMouseEnter={e=>e.currentTarget.style.background="rgba(239,68,68,.14)"}
-                onMouseLeave={e=>e.currentTarget.style.background="rgba(239,68,68,.08)"}>Sign Out</button>
-            </>
-          ) : authView === "forgot" ? (
-            <>
-              <button onClick={()=>{setAuthView("login");setForgotSt("idle");setForgotEmail("");}} style={{background:"none",border:"none",color:"rgba(255,255,255,.42)",cursor:"pointer",fontSize:14,marginBottom:32}}>← Back to login</button>
-              <div style={{textAlign:"center",marginBottom:32}}>
-                <div style={{width:52,height:52,background:"linear-gradient(135deg,#e8c56d,#c9972a)",borderRadius:12,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,margin:"0 auto 18px"}}>🔑</div>
-                <h1 style={{fontFamily:"'DM Serif Display',serif",fontSize:28,letterSpacing:"-0.02em",marginBottom:6}}>Reset Password</h1>
-                <p style={{color:"rgba(255,255,255,.38)",fontSize:14,lineHeight:1.6}}>Enter your email address and we'll send you a reset link.</p>
-              </div>
-              {forgotSt === "success" ? (
-                <div style={{background:"rgba(16,185,129,.07)",border:"1px solid rgba(16,185,129,.22)",borderRadius:14,padding:"28px 24px",textAlign:"center"}}>
-                  <div style={{fontSize:42,marginBottom:12}}>📬</div>
-                  <h3 style={{fontFamily:"'DM Serif Display',serif",fontSize:22,color:"#10b981",marginBottom:8}}>Check your inbox</h3>
-                  <p style={{fontSize:13,color:"rgba(255,255,255,.45)",marginBottom:20,lineHeight:1.65}}>If <strong style={{color:"#f0eee8"}}>{forgotEmail}</strong> is registered, you'll receive a reset link shortly.</p>
-                  {resetToken && <button className="cta" style={{fontSize:13,padding:"10px 22px",marginBottom:12}} onClick={()=>{setAuthView("reset");setForgotSt("idle")}}>[DEV] Continue to Reset Form →</button>}
-                  <div><button style={{background:"none",border:"none",color:"#e8c56d",fontSize:13,cursor:"pointer"}} onClick={()=>{setAuthView("login");setForgotSt("idle");setForgotEmail("");setResetToken("");}}>Back to login →</button></div>
-                </div>
-              ) : (
-                <div style={{background:"rgba(255,255,255,.03)",border:"1px solid rgba(255,255,255,.09)",borderRadius:18,padding:mobile?20:26}}>
-                  <div style={{display:"flex",flexDirection:"column",gap:14}}>
-                    <div><label style={LABEL}>Email Address *</label><input className="input-field" type="email" placeholder="you@example.com" value={forgotEmail} onChange={e=>setForgotEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleForgotPassword()}/></div>
-                    <button className="cta" style={{padding:"13px",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center",gap:8}} disabled={forgotSt==="loading"||!forgotEmail} onClick={handleForgotPassword}>
-                      {forgotSt==="loading"?<><Spinner/>Sending…</>:"Send Reset Link →"}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </>
-          ) : authView === "reset" ? (
-            <>
-              <button onClick={()=>{setAuthView("login");setResetSt("idle");setResetErr("");setResetForm({newPassword:"",confirm:""}); }} style={{background:"none",border:"none",color:"rgba(255,255,255,.42)",cursor:"pointer",fontSize:14,marginBottom:32}}>← Back to login</button>
-              <div style={{textAlign:"center",marginBottom:32}}>
-                <div style={{width:52,height:52,background:"linear-gradient(135deg,#e8c56d,#c9972a)",borderRadius:12,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,margin:"0 auto 18px"}}>🔐</div>
-                <h1 style={{fontFamily:"'DM Serif Display',serif",fontSize:28,letterSpacing:"-0.02em",marginBottom:6}}>New Password</h1>
-                <p style={{color:"rgba(255,255,255,.38)",fontSize:14}}>Choose a strong password for your account.</p>
-              </div>
-              {resetSt === "success" ? (
-                <div style={{background:"rgba(16,185,129,.07)",border:"1px solid rgba(16,185,129,.22)",borderRadius:14,padding:"32px 24px",textAlign:"center"}}>
-                  <div style={{fontSize:50,marginBottom:14}}>✓</div>
-                  <h3 style={{fontFamily:"'DM Serif Display',serif",fontSize:24,color:"#10b981",marginBottom:8}}>Password Reset!</h3>
-                  <p style={{color:"rgba(255,255,255,.45)",fontSize:14,marginBottom:24,lineHeight:1.65}}>Your password has been changed. You can now sign in with your new password.</p>
-                  <button className="cta" style={{fontSize:14,padding:"12px 28px"}} onClick={()=>{setAuthView("login");setResetSt("idle");setResetForm({newPassword:"",confirm:""});setResetToken("");}}>Sign In →</button>
-                </div>
-              ) : (
-                <div style={{background:"rgba(255,255,255,.03)",border:"1px solid rgba(255,255,255,.09)",borderRadius:18,padding:mobile?20:26}}>
-                  <div style={{display:"flex",flexDirection:"column",gap:14}}>
-                    <div>
-                      <label style={LABEL}>New Password *</label>
-                      <input className="input-field" type="password" placeholder="Min. 8 characters" value={resetForm.newPassword} onChange={e=>setResetForm(p=>({...p,newPassword:e.target.value}))}/>
-                    </div>
-                    <div>
-                      <label style={LABEL}>Confirm Password *</label>
-                      <input className="input-field" type="password" placeholder="Repeat your new password" value={resetForm.confirm} onChange={e=>setResetForm(p=>({...p,confirm:e.target.value}))}/>
-                      {resetForm.newPassword && (() => {
-                        const p=resetForm.newPassword;
-                        const strong=p.length>=12&&/[A-Z]/.test(p)&&/[0-9]/.test(p)&&/[^A-Za-z0-9]/.test(p);
-                        const medium=p.length>=8&&(/[A-Z]/.test(p)||/[0-9]/.test(p));
-                        const label=strong?"Strong":medium?"Medium":"Weak";
-                        const color=strong?"#10b981":medium?"#f59e0b":"#ef4444";
-                        const w=strong?"100%":medium?"60%":"25%";
-                        return <div style={{marginTop:8}}><div style={{height:3,background:"rgba(255,255,255,.07)",borderRadius:2,marginBottom:5}}><div style={{height:"100%",width:w,background:color,borderRadius:2,transition:"width .3s, background .3s"}}/></div><span style={{fontSize:11,color,fontWeight:600}}>{label} password</span></div>;
-                      })()}
-                    </div>
-                    {resetErr && <div style={{background:"rgba(239,68,68,.07)",border:"1px solid rgba(239,68,68,.22)",borderRadius:10,padding:"11px 14px",fontSize:13,color:"#ef4444"}}>⚠ {resetErr}</div>}
-                    <button className="cta" style={{padding:"13px",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center",gap:8}} disabled={resetSt==="loading"||!resetForm.newPassword||!resetForm.confirm||!resetToken} onClick={handleResetPassword}>
-                      {resetSt==="loading"?<><Spinner/>Saving…</>:"Set New Password →"}
-                    </button>
-                    {!resetToken && <p style={{fontSize:12,color:"rgba(239,68,68,.7)",textAlign:"center"}}>⚠ No reset token found. Please use the link from your email.</p>}
-                  </div>
-                </div>
-              )}
-            </>
-          ) : (
-            <>
-              <div style={{textAlign:"center",marginBottom:32}}>
-                <div style={{width:52,height:52,background:"linear-gradient(135deg,#e8c56d,#c9972a)",borderRadius:12,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,margin:"0 auto 18px"}}>✡</div>
-                <h1 style={{fontFamily:"'DM Serif Display',serif",fontSize:30,letterSpacing:"-0.02em",marginBottom:6}}>{authView==="login"?"Welcome Back":"Create Account"}</h1>
-                <p style={{color:"rgba(255,255,255,.38)",fontSize:14}}>{authView==="login"?"Sign in to your ReportASA account":"Join the ReportASA team"}</p>
-              </div>
-              <div style={{display:"flex",background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.08)",borderRadius:10,padding:4,marginBottom:26}}>
-                {["login","register"].map(v=>(
-                  <button key={v} onClick={()=>{setAuthView(v);setAuthSt("idle");setAuthErr("");}}
-                    style={{flex:1,background:authView===v?"rgba(232,197,109,.15)":"none",border:authView===v?"1px solid rgba(232,197,109,.3)":"1px solid transparent",borderRadius:7,padding:"9px 0",fontSize:13,fontWeight:600,color:authView===v?"#e8c56d":"rgba(255,255,255,.45)",cursor:"pointer",fontFamily:"'Outfit',sans-serif",transition:"all .2s"}}>
-                    {v==="login"?"Sign In":"Register"}
-                  </button>
-                ))}
-              </div>
-              <div style={{background:"rgba(255,255,255,.03)",border:"1px solid rgba(255,255,255,.09)",borderRadius:18,padding:mobile?20:26}}>
-                <div style={{display:"flex",flexDirection:"column",gap:14}}>
-                  {authView==="register"&&(
-                    <>
-                      <div><label style={LABEL}>Full Name *</label><input className="input-field" placeholder="Jane Smith" value={authForm.name} onChange={e=>setAuthForm(p=>({...p,name:e.target.value}))}/></div>
-                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-                        <div><label style={LABEL}>Title</label><input className="input-field" placeholder="e.g. Advocate" value={authForm.title} onChange={e=>setAuthForm(p=>({...p,title:e.target.value}))}/></div>
-                        <div><label style={LABEL}>Department</label><input className="input-field" placeholder="e.g. Outreach" value={authForm.department} onChange={e=>setAuthForm(p=>({...p,department:e.target.value}))}/></div>
-                      </div>
-                      <div><label style={LABEL}>Bio <span style={{color:"rgba(255,255,255,.3)",fontWeight:400}}>(optional)</span></label><textarea className="input-field" rows={2} placeholder="A short bio…" style={{resize:"none"}} value={authForm.bio} onChange={e=>setAuthForm(p=>({...p,bio:e.target.value}))}/></div>
-                    </>
-                  )}
-                  <div><label style={LABEL}>Email Address *</label><input className="input-field" type="email" placeholder="you@example.com" value={authForm.email} onChange={e=>setAuthForm(p=>({...p,email:e.target.value}))}/></div>
-                  <div><label style={LABEL}>Password *</label><input className="input-field" type="password" placeholder={authView==="register"?"Min. 8 characters":"••••••••"} value={authForm.password} onChange={e=>setAuthForm(p=>({...p,password:e.target.value}))}/></div>
-                  {authView==="login"&&(
-                    <div style={{display:"flex",justifyContent:"flex-end"}}>
-                      <button style={{background:"none",border:"none",color:"#e8c56d",fontSize:13,cursor:"pointer"}} onClick={()=>{setAuthView("forgot");setAuthSt("idle");setAuthErr("");}}>Forgot password?</button>
-                    </div>
-                  )}
-                  {authErr&&<div style={{background:"rgba(239,68,68,.07)",border:"1px solid rgba(239,68,68,.22)",borderRadius:10,padding:"11px 14px",fontSize:13,color:"#ef4444"}}>⚠ {authErr}</div>}
-                  <button className="cta" style={{padding:"13px",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center",gap:8}} disabled={authSt==="loading"} onClick={authView==="login"?handleLogin:handleRegister}>
-                    {authSt==="loading"?<><Spinner/>{authView==="login"?"Signing in…":"Creating account…"}</>:authView==="login"?"Sign In →":"Create Account →"}
-                  </button>
-                  <p style={{textAlign:"center",fontSize:13,color:"rgba(255,255,255,.32)"}}>
-                    {authView==="login"?"No account? ":"Already have one? "}
-                    <button style={{background:"none",border:"none",color:"#e8c56d",cursor:"pointer",fontSize:13}} onClick={()=>{setAuthView(authView==="login"?"register":"login");setAuthSt("idle");setAuthErr("");}}>
-                      {authView==="login"?"Create one →":"Sign in →"}
-                    </button>
-                  </p>
-                </div>
-              </div>
-            </>
-          )}
         </div>
       )}
 

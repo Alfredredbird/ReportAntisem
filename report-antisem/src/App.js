@@ -147,6 +147,9 @@ export default function App() {
   // Login disabled modal
   const [loginDisabledModal, setLoginDisabledModal] = useState(false);
 
+  // Submit disabled modal
+  const [submitDisabledModal, setSubmitDisabledModal] = useState(false);
+
   // API data
   const [apiStats, setApiStats] = useState({ reports_submitted: 0, cases_resolved_pct: 0, states_covered: 0, community_members: 0 });
   const [feed,     setFeed]     = useState(FALLBACK_REPORTS);
@@ -359,7 +362,13 @@ export default function App() {
       setMenuOpen(false);
       return;
     }
-    const map = { "About Us": "about", "Submit Offense": "submit", "Our Mission": "mission", "Contact Us": "contact", "Press": "press" };
+    // Submissions are disabled
+    if (label === "Submit Offense") {
+      setSubmitDisabledModal(true);
+      setMenuOpen(false);
+      return;
+    }
+    const map = { "About Us": "about", "Our Mission": "mission", "Contact Us": "contact", "Press": "press" };
     const target = map[label] || "home";
     setPage(target);
     setMenuOpen(false);
@@ -433,6 +442,60 @@ export default function App() {
         .press-card:hover{background:rgba(255,255,255,.05);border-color:rgba(232,197,109,.25);transform:translateY(-2px)}
       `}</style>
 
+      {/* ── SUBMIT DISABLED MODAL ── */}
+      {submitDisabledModal && (
+        <div
+          onClick={() => setSubmitDisabledModal(false)}
+          style={{
+            position: "fixed", inset: 0, zIndex: 9999,
+            background: "rgba(0,0,0,0.75)", backdropFilter: "blur(6px)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            padding: "20px",
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: "#13131a",
+              border: "1px solid rgba(232,197,109,0.25)",
+              borderRadius: 20,
+              padding: mobile ? "32px 24px" : "44px 44px",
+              maxWidth: 420,
+              width: "100%",
+              textAlign: "center",
+              animation: "fadeUp .25s ease both",
+            }}
+          >
+            <div style={{ width: 60, height: 60, background: "rgba(232,197,109,0.1)", border: "1px solid rgba(232,197,109,0.25)", borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, margin: "0 auto 20px" }}>🚧</div>
+            <h2 style={{
+              fontFamily: "'DM Serif Display',serif",
+              fontSize: "clamp(22px,4vw,28px)",
+              letterSpacing: "-0.02em",
+              marginBottom: 12,
+              color: "#f0eee8",
+            }}>
+              Submissions Temporarily Disabled
+            </h2>
+            <p style={{
+              fontSize: 14,
+              lineHeight: 1.75,
+              color: "rgba(255,255,255,0.5)",
+              maxWidth: 300,
+              margin: "0 auto 28px",
+            }}>
+              We're currently finalizing our privacy policy. Report submission will be restored shortly — thank you for your patience.
+            </p>
+            <button
+              className="cta"
+              style={{ padding: "12px 32px", fontSize: 14 }}
+              onClick={() => setSubmitDisabledModal(false)}
+            >
+              Got it
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── LOGIN DISABLED MODAL ── */}
       {loginDisabledModal && (
         <div
@@ -499,7 +562,7 @@ export default function App() {
         {!mobile && (
           <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
             {NAV_LINKS.filter(l => l !== "Login").map(l => l === "Submit Offense"
-              ? <button key={l} className="cta" style={{ padding: "8px 16px", fontSize: 13 }} onClick={() => goPage(l)}>{l}</button>
+              ? <button key={l} className="cta" style={{ padding: "8px 16px", fontSize: 13 }} onClick={() => setSubmitDisabledModal(true)}>{l}</button>
               : <button key={l} className="nav-btn" onClick={() => goPage(l)}>{l}</button>
             )}
             {/* Login button always shows the disabled modal */}
@@ -553,7 +616,7 @@ export default function App() {
                 Report antisemitic incidents securely and anonymously. Together, we document, respond, and protect our communities.
               </p>
               <div style={{ display: "flex", flexDirection: mobile ? "column" : "row", gap: 12, justifyContent: "center", alignItems: mobile ? "stretch" : "center" }}>
-                <button className="cta" style={{ fontSize: 15, padding: "13px 30px" }} onClick={() => goPage("Submit Offense")}>Report an Incident →</button>
+                <button className="cta" style={{ fontSize: 15, padding: "13px 30px" }} onClick={() => setSubmitDisabledModal(true)}>Report an Incident →</button>
                 <button className="nav-btn" style={{ fontSize: 15, padding: "13px 22px", border: "1px solid rgba(255,255,255,.15)", borderRadius: 10 }} onClick={() => goPage("Our Mission")}>Our Mission</button>
               </div>
             </div>
@@ -578,7 +641,7 @@ export default function App() {
             <h2 style={{ fontFamily: "'DM Serif Display',serif", fontSize: "clamp(22px,4vw,38px)", letterSpacing: "-0.02em", marginBottom: 28 }}>Report by Category</h2>
             <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "repeat(auto-fill,minmax(250px,1fr))", gap: 12 }}>
               {CATEGORIES.map((c, i) => (
-                <div key={i} className="cat-card" onClick={() => goPage("Submit Offense")}>
+                <div key={i} className="cat-card" onClick={() => setSubmitDisabledModal(true)}>
                   <div style={{ fontSize: 26, marginBottom: 10 }}>{c.icon}</div>
                   <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>{c.title}</div>
                   <div style={{ fontSize: 13, color: "rgba(255,255,255,.42)", lineHeight: 1.55 }}>{c.desc}</div>
@@ -595,7 +658,7 @@ export default function App() {
                 <p style={{ color: "#e8c56d", fontSize: 11, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>Live feed</p>
                 <h2 style={{ fontFamily: "'DM Serif Display',serif", fontSize: "clamp(22px,3vw,36px)", letterSpacing: "-0.02em" }}>Recent Reports</h2>
               </div>
-              <button className="cta" style={{ padding: "10px 22px", fontSize: 13, flexShrink: 0 }} onClick={() => goPage("Submit Offense")}>+ Submit a Report</button>
+              <button className="cta" style={{ padding: "10px 22px", fontSize: 13, flexShrink: 0 }} onClick={() => setSubmitDisabledModal(true)}>+ Submit a Report</button>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: mobile ? 8 : 14, marginBottom: 24 }}>
               {[
@@ -640,7 +703,7 @@ export default function App() {
               <div style={{ fontSize: 34, marginBottom: 12 }}>✡</div>
               <h2 style={{ fontFamily: "'DM Serif Display',serif", fontSize: "clamp(22px,4vw,40px)", marginBottom: 12, letterSpacing: "-0.02em" }}>Every Report Matters</h2>
               <p style={{ fontSize: 14, color: "rgba(255,255,255,.45)", maxWidth: 440, margin: "0 auto 26px", lineHeight: 1.7 }}>Your voice helps build a safer, documented record of antisemitism in America.</p>
-              <button className="cta" style={{ fontSize: 15, padding: "13px 34px" }} onClick={() => goPage("Submit Offense")}>Make a Report Now</button>
+              <button className="cta" style={{ fontSize: 15, padding: "13px 34px" }} onClick={() => setSubmitDisabledModal(true)}>Make a Report Now</button>
             </div>
           </section>
         </>
@@ -836,7 +899,7 @@ export default function App() {
                 <p style={{fontSize:14,color:"rgba(255,255,255,.45)",maxWidth:420,lineHeight:1.7}}>Every report you submit adds to the record and helps protect your community. It takes less than 2 minutes.</p>
               </div>
               <div style={{display:"flex",gap:12,flexWrap:"wrap",flexShrink:0}}>
-                <button className="cta" style={{fontSize:15,padding:"13px 28px"}} onClick={()=>goPage("Submit Offense")}>Report an Incident →</button>
+                <button className="cta" style={{fontSize:15,padding:"13px 28px"}} onClick={()=>setSubmitDisabledModal(true)}>Report an Incident →</button>
                 <button className="nav-btn" style={{fontSize:14,padding:"12px 20px",border:"1px solid rgba(255,255,255,.15)",borderRadius:10}} onClick={()=>goPage("Contact Us")}>Get in Touch</button>
               </div>
             </div>
